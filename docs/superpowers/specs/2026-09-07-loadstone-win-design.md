@@ -99,8 +99,10 @@ Loadstone.Core/
   Windows/    IMovableWindow.cs, WindowIdentity.cs, WindowDirector.cs
   Drag/       DragSnapTracker.cs, SnapTarget.cs
   Settings/   AppSettings.cs, ISettingsService.cs, SettingsService.cs
-  System/     NativeSnap.cs, INativeSnapSettings.cs, IStartupRegistration.cs, StartupStatus.cs
+  Platform/   NativeSnap.cs, INativeSnapSettings.cs, IStartupRegistration.cs, StartupStatus.cs
 ```
+
+The folder is `Platform`, not `System`, because a `Loadstone.Core.System` namespace would shadow the BCL's `System` namespace inside Core.
 
 `Rect` and `Point` are small integer value records so Core does not depend on `System.Drawing` or WPF.
 
@@ -259,7 +261,7 @@ Core owns the interfaces the UI implements, all with obvious fakes for tests: `I
 
 ### 5.1 Interop
 
-`Interop/` follows the template: constants, structs, and `LibraryImport` partial classes split by DLL. About twenty-five functions, most adapted from the user's WindowsAppManagerMcp declarations: window queries (`GetForegroundWindow`, `GetAncestor`, `IsWindow`, `IsWindowVisible`, `IsIconic`, `IsZoomed`, `GetWindowRect`, `GetWindowLongPtr`, `GetClassName`, `GetWindowThreadProcessId`, `GetWindowPlacement`, `ShowWindow`, `SetWindowPos`), DWM (`DwmGetWindowAttribute` for extended frame bounds and cloaking), monitors (`EnumDisplayMonitors`, `GetMonitorInfo`, `MonitorFromPoint`, `GetDpiForMonitor`, `GetDpiForWindow`), input (`RegisterHotKey`, `UnregisterHotKey`, `GetCursorPos`, `ToUnicodeEx`, `GetKeyboardLayout`), events (`SetWinEventHook`, `UnhookWinEvent`), system (`SystemParametersInfo`, `MessageBeep`, `RegisterWindowMessage`, `PostMessage`).
+`Interop/` follows the template: constants, structs, and `LibraryImport` partial classes split by DLL. About twenty-five functions, most adapted from the user's WindowsAppManagerMcp declarations: window queries (`GetForegroundWindow`, `GetAncestor`, `IsWindow`, `IsWindowVisible`, `IsIconic`, `IsZoomed`, `GetWindowRect`, `GetWindowLongPtr`, `GetClassName`, `GetWindowThreadProcessId`, `GetWindowPlacement`, `ShowWindow`, `SetWindowPos`), DWM (`DwmGetWindowAttribute` for extended frame bounds and cloaking), monitors (`EnumDisplayMonitors`, `GetMonitorInfo`, `MonitorFromPoint`, `GetDpiForMonitor`, `GetDpiForWindow`), input (`RegisterHotKey`, `UnregisterHotKey`, `GetCursorPos`, `ToUnicodeEx`, `MapVirtualKeyEx`, `GetKeyboardLayout`), events (`SetWinEventHook`, `UnhookWinEvent`), system (`SystemParametersInfo`, `MessageBeep`, `SetProcessDpiAwarenessContext` for the test host).
 
 ### 5.2 Win32Window
 
@@ -323,6 +325,8 @@ Every display has its own zones, including the edge it shares with a neighbor. T
 
 `SnapPreview` is a WPF window: no style, transparent, no taskbar entry, topmost, not activated on show, hit-test invisible. After the handle exists it adds `WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`. It is positioned with `SetWindowPos(HWND_TOPMOST, …, SWP_NOACTIVATE | SWP_SHOWWINDOW)` in physical pixels, because WPF's own placement is wrong on mixed-DPI desks, a lesson recorded in Snap. The content is a rounded rectangle, 10 px radius, filled with the system accent blue at 22 percent and stroked 2 px at 85 percent, inset 6 px from the tile so it reads as a preview. It is only ever hidden, never closed.
 
+Topmost is asserted by Loadstone's own process on every show, never requested on the window from elsewhere. The spike found that Windows refuses a topmost request made by a background process on another process's window, but honors one a process makes on its own window after the window exists, whether plain or overlay-styled.
+
 ## 7. System side effects
 
 ### 7.1 Windows edge snapping
@@ -334,7 +338,7 @@ Every display has its own zones, including the edge it shares with a neighbor. T
 | `DockMoving` | `SPI_GETDOCKMOVING` 0x0090 | `SPI_SETDOCKMOVING` 0x0091 | `HKCU\Control Panel\Desktop\DockMoving` |
 | `SnapSizing` | `SPI_GETSNAPSIZING` 0x008E | `SPI_SETSNAPSIZING` 0x008F | `HKCU\Control Panel\Desktop\SnapSizing` |
 
-`SystemParametersNativeSnapSettings` writes with `SPIF_UPDATEINIFILE | SPIF_SENDCHANGE` so the value persists and Explorer is told. Both flags read true on the development machine (Windows 11 25H2, build 26200) with these constants.
+`SystemParametersNativeSnapSettings` writes with `SPIF_UPDATEINIFILE | SPIF_SENDCHANGE` so the value persists and Explorer is told. For these two actions the boolean travels in `uiParam` and `pvParam` must be zero; passing the value in `pvParam` with `uiParam` zero silently writes FALSE. Reads take a pointer to a BOOL in `pvParam`. Both were established on the development machine (Windows 11 25H2, build 26200) on 2026-09-07; see 10.4.
 
 Behavior:
 
@@ -342,7 +346,7 @@ Behavior:
 - `Apply(dragSnappingEnabled: false)` and exit: write the captured values back, clear the marker. A flag whose read failed at capture time is never written.
 - Only while Loadstone's own drag snapping is on. Turning the setting off restores Windows' behavior immediately. The Mac does this unconditionally; tying it to the setting is the one deliberate difference.
 
-Fallback: if the spike in 10.4 shows that these two flags do not suppress every drag-to-edge behavior, the managed list gains the master flag `WinArranging` (`SPI_GETWINARRANGING` 0x0082 / `SPI_SETWINARRANGING` 0x0083), which also disables Win+Arrow, and the README says so. If only the top-edge layouts flyout survives, the list instead gains the Explorer value `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\EnableSnapAssistFlyout` (a DWORD, written with a `WM_SETTINGCHANGE` broadcast). The component's shape does not change in either case.
+The spike in 10.4 confirmed that these two flags are sufficient for the edge, corner, and top-edge behaviors, so the managed list is final. The top-edge Snap Layouts flyout (Explorer's `EnableSnapAssistFlyout`) could not be observed because it is already off on the development machine; Loadstone does not manage it, and the README tells users where to turn it off if it appears while dragging to the top.
 
 The README's troubleshooting entry tells users where to put the setting back by hand: Settings › System › Multitasking › Snap windows (`ms-settings:multitasking`).
 
@@ -399,7 +403,7 @@ WPF-UI theme and control dictionaries in `App.xaml`, following the system theme 
 ## 9. Application lifecycle
 
 - `App.xaml` has no `StartupUri`; `ShutdownMode` is `OnExplicitShutdown`. `OnStartup` builds the Autofac `IHost` per the template and resolves the singletons in the Mac's order: settings, native snap applied for the drag setting, tray, hotkeys, drag monitor. `OnExit` uninstalls the drag monitor, unregisters hotkeys, restores native snap, and disposes the tray icon.
-- Single instance: a named mutex `Loadstone-SingleInstance`. A second instance broadcasts a registered window message and exits; the running instance opens Settings on receiving it.
+- Single instance: a named mutex `Loadstone-SingleInstance`. A second instance sets a named auto-reset event `Loadstone-ShowSettings` and exits; the running instance waits on that event from the thread pool and opens Settings on the dispatcher when it fires. A broadcast window message would not do: message-only windows never receive broadcasts, and Loadstone has no other window that is always alive.
 - Unhandled exceptions on the dispatcher, the app domain, and unobserved tasks are logged as fatal, native snap is restored best-effort, and the process ends. The marker covers the case where even that fails.
 - Logging: NLog behind `ILogger<T>`, async file target, daily files `Loadstone-<yyyy-MM-dd>.log` under `%LOCALAPPDATA%\Loadstone\Logs`, 14 files kept, 10 MB archive threshold. The startup summary at Info level lists drag state, hook state, native-snap state, and the effective binding and status per command. Categories are the logger type names; the README's "reading the log" section points at the folder.
 - Beep: `MessageBeep(MB_OK)`.
@@ -418,7 +422,7 @@ xUnit v3, NSubstitute, Shouldly. Test-driven throughout. Test names follow `Meth
 - `DragSnapTrackerTests`: no preview before the window moves, arm on origin change, resize disarms for the drag, end equal to baseline commits nothing, outline drag commits at end, zone resolved on the display under the cursor, reset on begin.
 - `WindowCommandTests`: pins ids, order, sections, titles, and defaults.
 - `ShortcutTests`: parse and format round trip for every key name, canonical modifier order, case-insensitivity, rejection of empty or unknown, `Vk0x` fallback.
-- `NativeSnapTests` over a fake `INativeSnapSettings`: capture then off, restore, marker written and cleared, unclean-exit recovery applies the marker before capturing, a failed read is never written, off-then-on does not recapture.
+- `NativeSnapTests` over a fake `INativeSnapSettings`: capture then off, restore, marker written and cleared, unclean-exit recovery applies the marker before capturing, a failed read is never written, restore followed by suppress captures the values current at that time.
 - `SettingsServiceTests` on a temp directory: defaults when missing, round trip, atomic write leaves no temp file, corrupt file backed up and replaced.
 - `StartupStatusTests`: pure decoding of the Startup Approved bytes. The registry wrapper itself is covered in UI tests.
 
@@ -438,16 +442,17 @@ Tests that touch real windows run on an STA thread through an STA fact attribute
 
 The WinEvent hook, the preview window's visuals, and the settings window's XAML are exercised by running the app, as the Mac's monitors and views are.
 
-### 10.4 Spike: Windows edge snapping flags
+### 10.4 Spike: Windows edge snapping flags (done 2026-09-07)
 
-The first task of the plan, before any product code. On the development machine (Windows 11 25H2), with the Explorer top-edge flyout temporarily enabled so it can be observed:
+Run during planning on the development machine (Windows 11 25H2, build 26200; primary display 3840 by 2160 at 150 percent with a second display to its left at 100 percent). A throwaway script created a test window, dragged it by its title bar with injected mouse input, and read back its rectangle, once with the flags as found and once with `DockMoving` and `SnapSizing` set to false; it restored both flags afterwards.
 
-1. Set `DockMoving` and `SnapSizing` to false through `SystemParametersInfo` with the persist and broadcast flags.
-2. Drag a test window by its title bar to the left edge and release. Pass: no OS preview appears and the window's rectangle is where it was dropped, not the left half.
-3. Repeat for a corner (no quarter snap) and the top edge (no maximize, no layouts flyout).
-4. Restore both flags and the Explorer value.
+| Drop | Flags on | Flags off |
+| --- | --- | --- |
+| Left edge | snapped to the left half | left where dropped |
+| Top-left corner | snapped to the top-left quarter | left where dropped |
+| Top edge | maximized | left where dropped, not maximized |
 
-The outcome selects the managed flag list in 7.1 and is recorded in `CLAUDE.md`.
+Two more facts came out of it and are carried into the design: the boolean for these actions travels in `uiParam` (7.1), and a background process cannot make another process's window topmost but can make its own window topmost once it exists (6.3). The Snap Layouts flyout was not observed because it is off on that machine. The results are recorded in `CLAUDE.md` by the documentation task.
 
 ## 11. Continuous integration
 
@@ -473,7 +478,8 @@ A later phase, implemented through the wpf-installer skill after the app works e
 
 | Risk | Handling |
 | --- | --- |
-| The two snap flags do not suppress every drag-to-edge behavior on Windows 11 | Spike first (10.4); fallback flags are already designed (7.1) |
+| The two snap flags do not suppress every drag-to-edge behavior on Windows 11 | Resolved by the spike (10.4): edge, corner, and top-edge behaviors are suppressed. Only the Snap Layouts flyout is unverified, and the README covers it |
+| A background process cannot make a window topmost | Resolved by the spike: it can for its own window. The preview asserts topmost from Loadstone's process on every show (6.3) |
 | Some application never enters the standard move loop, so no drag events arrive for it | Accepted; hotkeys still work for it. Chrome, Electron, WPF, WinForms, UWP frames, and Win32 apps all use the standard loop |
 | An STA fact attribute for xUnit v3 is unavailable | Small STA thread helper in the UI test project |
 | GitHub's Windows runner cannot create windows | Environment check skips the real-window tests there, mirroring the Mac's CI skip |
