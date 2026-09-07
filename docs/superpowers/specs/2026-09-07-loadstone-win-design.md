@@ -270,7 +270,7 @@ Core owns the interfaces the UI implements, all with obvious fakes for tests: `I
 - `Frame` reads `DWMWA_EXTENDED_FRAME_BOUNDS`, the rectangle the user sees. `GetWindowRect` includes the invisible resize borders (about 7 px per side at 100 percent), which is why naive tiling leaves gaps between tiles. Falls back to `GetWindowRect` if the DWM call fails. Null when the handle is no longer a window or both calls fail.
 - `SetFrame(target)`:
   1. If the window is minimized or maximized, `ShowWindow(SW_RESTORE)` first; `SetWindowPos` misbehaves on those states.
-  2. If the window has no `WS_THICKFRAME` style, it is fixed-size: keep its current size and center it inside the target, clamped to the target. Snap does the same.
+  2. If the window has no `WS_THICKFRAME` style, it is fixed-size: keep its current size and center it on the target. A window larger than the tile overhangs it rather than being resized, because `SetWindowPos` would resize a window that has no sizing frame and break its layout.
   3. Compute the border insets as the difference between `GetWindowRect` and the extended frame bounds, and expand the target by them so the visible frame lands on the target.
   4. `SetWindowPos(hwnd, 0, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE)`. A false return is `Rejected` with `GetLastError`. The common case is a window of an elevated process, which UIPI blocks with access denied.
   5. Read the frame back. If it differs from the target, write once more with the same expanded rectangle. This is the DPI dance: moving a per-monitor-aware window to a monitor with a different scale makes it resize itself on `WM_DPICHANGED`, and the second write lands once it lives there. It is the Windows form of the Mac's size, position, size sequence.

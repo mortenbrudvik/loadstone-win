@@ -63,9 +63,10 @@ internal sealed class Win32Window : IMovableWindow
             return CommandOutcome.FrameUnreadable;
         }
 
-        // A window without a sizing frame is fixed-size: keep its size and centre it in the tile.
+        // A window without a sizing frame is fixed-size: keep its size and centre it on the tile,
+        // overhanging when it is larger rather than being resized.
         var fixedSize = (User32.GetWindowLongPtr(Hwnd, NativeConstants.GWL_STYLE) & NativeConstants.WS_THICKFRAME) == 0;
-        var wanted = fixedSize ? Layout.Centered(visible, target) : target;
+        var wanted = fixedSize ? CenteredOn(visible, target) : target;
 
         var first = Write(wanted);
         if (!first.IsMoved)
@@ -87,6 +88,14 @@ internal sealed class Win32Window : IMovableWindow
 
         return CommandOutcome.Moved;
     }
+
+    /// <summary>
+    /// A fixed-size window keeps its size and is centred on the tile; when it is larger than the tile
+    /// it overhangs rather than being resized, because SetWindowPos would resize a window that has no
+    /// sizing frame and break its layout.
+    /// </summary>
+    private static Rect CenteredOn(Rect current, Rect target) =>
+        new(target.X + (target.Width - current.Width) / 2, target.Y + (target.Height - current.Height) / 2, current.Width, current.Height);
 
     /// <summary>Expands the visible target by the current border insets and writes it. Moved even if the app clamped the size; only a refused write is an error.</summary>
     private CommandOutcome Write(Rect visibleTarget)

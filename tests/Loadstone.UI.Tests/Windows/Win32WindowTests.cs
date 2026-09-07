@@ -1,6 +1,5 @@
 using System.Windows;
 using Loadstone.Core.Commands;
-using Loadstone.Core.Geometry;
 using Loadstone.UI.Windows;
 using Shouldly;
 using Xunit;
@@ -60,7 +59,26 @@ public class Win32WindowTests
         var after = window.Frame.ShouldNotBeNull();
         after.Width.ShouldBe(before.Width);
         after.Height.ShouldBe(before.Height);
-        var expected = Layout.Centered(before, target);
+        var expected = new Rect(target.X + (target.Width - before.Width) / 2, target.Y + (target.Height - before.Height) / 2, before.Width, before.Height);
+        Math.Abs(after.X - expected.X).ShouldBeLessThanOrEqualTo(1);
+        Math.Abs(after.Y - expected.Y).ShouldBeLessThanOrEqualTo(1);
+    }
+
+    [WpfFact]
+    public void SetFrame_FixedSizeWindowLargerThanTheTarget_KeepsItsSizeAndOverhangs()
+    {
+        using var test = new TestWindow(resizable: false);
+        var window = new Win32Window(test.Handle);
+        var before = window.Frame.ShouldNotBeNull();
+        var target = new Rect(300, 200, 301, 201);
+
+        window.SetFrame(target).ShouldBe(CommandOutcome.Moved);
+        TestWindow.Pump();
+
+        var after = window.Frame.ShouldNotBeNull();
+        after.Width.ShouldBe(before.Width);
+        after.Height.ShouldBe(before.Height);
+        var expected = new Rect(target.X + (target.Width - before.Width) / 2, target.Y + (target.Height - before.Height) / 2, before.Width, before.Height);
         Math.Abs(after.X - expected.X).ShouldBeLessThanOrEqualTo(1);
         Math.Abs(after.Y - expected.Y).ShouldBeLessThanOrEqualTo(1);
     }
