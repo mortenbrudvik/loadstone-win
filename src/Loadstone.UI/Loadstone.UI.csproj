@@ -12,6 +12,8 @@
     <Copyright>Copyright © 2026 Morten Brudvik</Copyright>
     <Description>Snap any window into place: halves, corners, and thirds from the keyboard or by dragging to an edge.</Description>
     <NoWarn>$(NoWarn);CS8524</NoWarn>
+    <!-- LibraryImport's generated marshalling stubs are unsafe code. Only this project declares Win32; Core stays managed-only. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
