@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Loadstone.Core</RootNamespace>
+    <!-- CS8524 warns that a switch expression over an enum does not handle unnamed values. Core
+         relies on switch expressions over closed enums (Tile, WindowCommand) having NO discard arm,
+         so that adding an enum member fails the build (CS8509) until every switch covers it. -->
+    <NoWarn>$(NoWarn);CS8524</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Loadstone.Core.Tests" />
+  </ItemGroup>
+
+</Project>

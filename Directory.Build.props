@@ -1,0 +1,11 @@
+<Project>
+  <!-- Shared by every project in the tree. Project-specific settings (UseWPF, OutputType,
+       AssemblyName, version) stay in each .csproj. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

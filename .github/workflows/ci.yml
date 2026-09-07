@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+# A new push to the same branch cancels the run still going for the old one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Loadstone.slnx
+
+      - name: Build
+        run: dotnet build Loadstone.slnx -c Release --no-restore
+
+      # Real-window tests run here too: the hosted Windows runner has an interactive desktop.
+      # .NET 10 SDK's "dotnet test" runs Microsoft.Testing.Platform projects (xunit.v3) natively,
+      # opted into via global.json; that mode takes the solution via --solution rather than as a
+      # positional argument, and TRX output via --report-trx (Microsoft.Testing.Extensions.TrxReport)
+      # rather than the VSTest-only --logger. See https://aka.ms/dotnet-test-mtp-error.
+      - name: Test
+        run: dotnet test --solution Loadstone.slnx -c Release --no-build --report-trx --results-directory TestResults
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+          retention-days: 14

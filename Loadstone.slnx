@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Loadstone.Core/Loadstone.Core.csproj" />
+    <Project Path="src/Loadstone.UI/Loadstone.UI.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Loadstone.Core.Tests/Loadstone.Core.Tests.csproj" />
+    <Project Path="tests/Loadstone.UI.Tests/Loadstone.UI.Tests.csproj" />
+  </Folder>
+</Solution>
