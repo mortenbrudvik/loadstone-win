@@ -70,14 +70,19 @@ public sealed class NativeSnap
     {
         if (_captured is null)
         {
-            RecoverFromUncleanExit();
+            var failedRecovery = RecoverFromUncleanExit();
 
             var captured = new Dictionary<string, bool>();
             foreach (var flag in ManagedFlags)
             {
-                if (_native.Read(flag) is { } value)
+                if (failedRecovery.TryGetValue(flag, out var value))
                 {
+                    // Recovery write failed; use the marker value instead of reading
                     captured[flag] = value;
+                }
+                else if (_native.Read(flag) is { } readValue)
+                {
+                    captured[flag] = readValue;
                 }
                 else
                 {
@@ -105,12 +110,14 @@ public sealed class NativeSnap
     /// capturing first would record Loadstone's own false as "what the user had" and make the
     /// change permanent.
     /// </summary>
-    private void RecoverFromUncleanExit()
+    private Dictionary<string, bool> RecoverFromUncleanExit()
     {
         var stored = _settings.Current.NativeSnapPreviousValues;
+        var failedRecovery = new Dictionary<string, bool>();
+
         if (stored is null)
         {
-            return;
+            return failedRecovery;
         }
 
         if (stored.Count > 0)
@@ -118,10 +125,15 @@ public sealed class NativeSnap
             _logger.LogWarning("restoring Windows edge snapping flags left behind by an unclean exit");
             foreach (var (flag, value) in stored)
             {
-                _native.Write(flag, value);
+                if (!_native.Write(flag, value))
+                {
+                    _logger.LogError("could not restore Windows edge snapping flag {Flag} to {Value} after an unclean exit; keeping it as the baseline", flag, value);
+                    failedRecovery[flag] = value;
+                }
             }
         }
 
         _settings.Update(s => s.NativeSnapPreviousValues = null);
+        return failedRecovery;
     }
 }

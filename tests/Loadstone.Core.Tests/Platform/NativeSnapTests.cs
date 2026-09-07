@@ -144,6 +144,32 @@ public class NativeSnapTests
     }
 
     [Fact]
+    public void Apply_On_AfterUncleanExit_WhenARecoveryWriteFails_KeepsTheStoredValueAsBaseline()
+    {
+        // Marker with what the user had
+        _settings.Current.NativeSnapPreviousValues = new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = true };
+        // Previous run left both flags off
+        _native.Values["DockMoving"] = false;
+        _native.Values["SnapSizing"] = false;
+        // DockMoving write will fail during recovery
+        _native.Unwritable.Add("DockMoving");
+
+        var snap = NewNativeSnap();
+        snap.Apply(dragSnappingEnabled: true);
+
+        // The marker should have both values even though DockMoving write failed
+        _settings.Current.NativeSnapPreviousValues.ShouldBe(new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = true });
+
+        // Now let DockMoving be written
+        _native.Unwritable.Remove("DockMoving");
+        snap.Restore();
+
+        // Both should be restored to true
+        _native.Values["DockMoving"].ShouldBeTrue();
+        _native.Values["SnapSizing"].ShouldBeTrue();
+    }
+
+    [Fact]
     public void ManagedFlags_AreDockMovingAndSnapSizing()
     {
         NativeSnap.ManagedFlags.ShouldBe(["DockMoving", "SnapSizing"]);
