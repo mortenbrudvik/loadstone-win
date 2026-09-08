@@ -352,9 +352,9 @@ The README's troubleshooting entry tells users where to put the setting back by 
 
 ### 7.2 Launch at login
 
-`RegistryStartupRegistration` writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Loadstone`, data the quoted path of the running exe. `Disable` deletes the value. `Status` reads `…\Explorer\StartupApproved\Run`, value `Loadstone`: absent or first byte 0x02 means enabled, 0x03 means Task Manager disabled it. That status surfaces in Settings as "Disabled in Task Manager › Startup apps" with a button that opens `ms-settings:startupapps`, the counterpart of the Mac's approval message.
+`RegistryStartupRegistration` writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Loadstone`, data the quoted path of the running exe. `Disable` deletes the value. `Status` reads `…\Explorer\StartupApproved\Run`, value `Loadstone`: absent or first byte 0x02 means enabled, 0x03 means Task Manager disabled it. That status surfaces in Settings as "Disabled in Task Manager › Startup apps" with a button that opens `ms-settings:startupapps`, the counterpart of the Mac's approval message. `Enable` deletes that `StartupApproved\Run` value as well as writing the Run value: it is the one write outside the Run key, and without it Task Manager's disable would outlive re-enabling from Settings.
 
-At launch, if the Run value exists and points somewhere other than the running exe (an installer moved it), it is rewritten. A failed write rolls the toggle back and shows the error, with the same re-entrancy guard the Mac's `isApplyingLoginItem` needed.
+At launch, if the Run value exists and the path it holds is no longer on disk (an installer moved the exe), it is rewritten to the running exe. A registered path that still exists is left alone even when it is a different copy: repointing the entry at whichever build happens to launch would hand the user's login item to a build output directory. A failed write rolls the toggle back and shows the error, with the same re-entrancy guard the Mac's `isApplyingLoginItem` needed.
 
 ## 8. UI
 
@@ -470,7 +470,7 @@ A later phase, implemented through the wpf-installer skill after the app works e
 ## 13. Documentation
 
 - `README.md` follows the Mac README's structure: what it is, features, default shortcuts (Windows chords), drag-to-snap zones, install (download the installer, run it), build from source (`dotnet build`, `dotnet test`), troubleshooting, how it works, name, license. Troubleshooting covers: a window that will not move (elevated process, fixed-size, app refused), a shortcut that is ignored (in use by another app, AltGr character on your layout), dragging that does not snap (title bar, shared edges), Restore does nothing (one-shot), edge snapping left off after a crash and where to put it back, reading the log.
-- `docs/snap-zones.svg` is copied from the Mac repo unchanged (it is platform neutral). `docs/layouts.svg` is regenerated with Windows chords.
+- Both diagrams are the Mac's with Windows labels rather than copies: `docs/snap-zones.svg` keeps the Mac's geometry and legend but reads "16 px … at 100% scaling" where the Mac reads points, and `docs/layouts.svg` is regenerated with the Windows chords.
 - `CLAUDE.md` from the wpf-scaffold template, plus an architecture section carrying the invariants over from the Mac: command ids never change, the floor rule and why fixtures are odd, place twice for DPI, the visible frame versus the outer rectangle, the native-snap marker and why recovery runs before capture, the ledger written after acceptance, the drag tracker's rules, and the spike's outcome.
 - `LICENSE`: MIT, © 2026 Morten Brudvik.
 
