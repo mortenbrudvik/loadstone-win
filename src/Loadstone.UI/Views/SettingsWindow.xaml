@@ -1,4 +1,4 @@
-<ui:FluentWindow
+﻿<ui:FluentWindow
     x:Class="Loadstone.UI.Views.SettingsWindow"
     x:ClassModifier="internal"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -8,6 +8,7 @@
     xmlns:views="clr-namespace:Loadstone.UI.Views"
     xmlns:vm="clr-namespace:Loadstone.UI.ViewModels"
     Title="Loadstone Settings"
+    Icon="pack://application:,,,/Loadstone;component/Assets/loadstone.ico"
     Width="520"
     Height="560"
     MinWidth="480"
@@ -28,7 +29,7 @@
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
 
-    <ui:TitleBar Grid.Row="0" Title="Loadstone Settings" ShowMaximize="False" />
+    <ui:TitleBar x:Name="SettingsTitleBar" Grid.Row="0" Title="Loadstone Settings" ShowMaximize="False" />
 
     <TabControl Grid.Row="1" Margin="16,8,16,16">
 

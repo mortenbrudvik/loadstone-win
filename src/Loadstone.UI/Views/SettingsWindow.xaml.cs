@@ -1,7 +1,9 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Media.Imaging;
 using Loadstone.UI.ViewModels;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
@@ -17,7 +19,34 @@ internal partial class SettingsWindow : FluentWindow
         General = general;
         Shortcuts = shortcuts;
         DataContext = this;
+        if (AppIconFrame(32) is { } frame)
+        {
+            SettingsTitleBar.Icon = new ImageIcon { Source = frame };
+        }
+
         SystemThemeWatcher.Watch(this);
+    }
+
+    /// <summary>
+    /// The app icon frame closest to <paramref name="pixels"/>, or null when the resource is missing,
+    /// so a renamed or dropped asset leaves the window without an icon rather than without a window.
+    /// The component-qualified pack URI resolves under the test host too, whose entry assembly is not
+    /// Loadstone.
+    /// </summary>
+    private static BitmapFrame? AppIconFrame(int pixels)
+    {
+        try
+        {
+            var decoder = new IconBitmapDecoder(
+                new Uri("pack://application:,,,/Loadstone;component/Assets/loadstone.ico"),
+                BitmapCreateOptions.DelayCreation,
+                BitmapCacheOption.OnDemand);
+            return decoder.Frames.OrderBy(f => Math.Abs(f.PixelWidth - pixels)).FirstOrDefault();
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or FileFormatException or UriFormatException)
+        {
+            return null;
+        }
     }
 
     public SettingsViewModel General { get; }

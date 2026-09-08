@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Loadstone.Core.Commands;
@@ -46,6 +46,11 @@ public class SettingsWindowTests
             window.Resources.MergedDictionaries.Add(new ThemesDictionary { Theme = ApplicationTheme.Dark });
             window.Resources.MergedDictionaries.Add(new ControlsDictionary());
             window.Show();
+
+            // A renamed or dropped .ico leaves the title bar without an icon and says nothing, since
+            // AppIconFrame swallows the miss on purpose so the window still opens. This is what turns
+            // that silence into a failing test.
+            window.SettingsTitleBar.Icon.ShouldNotBeNull();
             window.UpdateLayout();
             var tabs = Descendants<TabControl>(window).ShouldHaveSingleItem();
 
