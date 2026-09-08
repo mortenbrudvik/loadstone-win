@@ -1,11 +1,14 @@
-using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Security;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Loadstone.Core.Platform;
 using Loadstone.Core.Settings;
+using Loadstone.UI.Interop;
+using Loadstone.UI.Services;
 using Microsoft.Extensions.Logging;
+using static Loadstone.UI.Interop.NativeMethods;
 
 namespace Loadstone.UI.ViewModels;
 
@@ -81,7 +84,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
             RefreshStartup();
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or InvalidOperationException)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or InvalidOperationException or SecurityException)
         {
             _logger.LogError(ex, "Launch at login {Action} failed", value ? "enable" : "disable");
             LaunchAtLoginMessage = $"Could not change Launch at login: {ex.Message}";
@@ -94,8 +97,13 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenStartupApps() =>
-        Process.Start(new ProcessStartInfo("ms-settings:startupapps") { UseShellExecute = true });
+    private void OpenStartupApps()
+    {
+        if (!UriLauncher.TryOpen("ms-settings:startupapps", _logger))
+        {
+            User32.MessageBeep(NativeConstants.MB_OK);
+        }
+    }
 
     /// <summary>Re-reads the registry; the launch-at-login state lives there, not in settings.json.</summary>
     public void RefreshStartup()

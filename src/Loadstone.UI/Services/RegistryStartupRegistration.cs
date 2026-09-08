@@ -1,3 +1,4 @@
+using System.IO;
 using Loadstone.Core.Platform;
 using Microsoft.Win32;
 
@@ -66,13 +67,32 @@ internal sealed class RegistryStartupRegistration : IStartupRegistration
         run?.DeleteValue(ValueName, throwOnMissingValue: false);
     }
 
-    /// <summary>After an installer moved the exe the Run value still points at the old path; rewrite it. Does nothing when not registered.</summary>
+    /// <summary>
+    /// After an installer moved the exe the Run value points at a path that is no longer there; rewrite
+    /// it to the running exe. A registered path that still exists is left alone even when it is a
+    /// different build: a second copy on disk was registered deliberately, and repointing the entry at
+    /// whichever copy happens to launch would hand the user's login item to a build output directory.
+    /// Does nothing when not registered.
+    /// </summary>
     public void RefreshPathIfStale()
     {
         using var run = Registry.CurrentUser.OpenSubKey(_runKeyPath, writable: true);
-        if (run?.GetValue(ValueName) is string current && current != QuotedExePath)
+        if (run?.GetValue(ValueName) is string current && !File.Exists(ExePathIn(current)))
         {
             run.SetValue(ValueName, QuotedExePath);
         }
+    }
+
+    /// <summary>The exe path out of a Run value, which is the quoted path; anything after the closing quote is arguments.</summary>
+    private static string ExePathIn(string value)
+    {
+        var trimmed = value.Trim();
+        if (!trimmed.StartsWith('"'))
+        {
+            return trimmed;
+        }
+
+        var end = trimmed.IndexOf('"', 1);
+        return end < 0 ? trimmed[1..] : trimmed[1..end];
     }
 }

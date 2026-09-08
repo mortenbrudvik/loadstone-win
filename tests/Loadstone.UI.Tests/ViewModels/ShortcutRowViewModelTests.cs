@@ -79,6 +79,38 @@ public class ShortcutRowViewModelTests
     }
 
     [Fact]
+    public void Status_WhenAnotherRowHoldsTheSameChord_NamesThatRow()
+    {
+        var shared = WindowCommand.RightHalf.DefaultShortcut();
+        _registrar.Register(Arg.Any<int>(), shared).Returns(HotkeyStatus.InUse(1409));
+        _hotkeys.SetShortcut(WindowCommand.LeftHalf, shared);
+
+        new ShortcutRowViewModel(WindowCommand.LeftHalf, _hotkeys).Status.ShouldBe("Also bound to Right Half");
+    }
+
+    /// <summary>
+    /// The recorder commits the chord while the center is still suspended, so the status recorded then is
+    /// the *old* chord's. Only Resume() registers the new one, and the row has to re-read it: this is the
+    /// spec 1.2 "in use by another app" caption for a chord recorded in the Settings window.
+    /// </summary>
+    [Fact]
+    public void CommittingAChordWhileRecording_ShowsTheRegistrationStatusOnceRecordingStops()
+    {
+        var vm = new ShortcutsViewModel(_hotkeys);
+        var row = vm.Groups.SelectMany(g => g.Rows).First(r => r.Command == WindowCommand.LeftHalf);
+        var taken = Shortcut.Parse("Ctrl+Alt+Shift+Left");
+        _registrar.Register(Arg.Any<int>(), taken).Returns(HotkeyStatus.InUse(1409));
+
+        row.IsRecording = true;
+        row.Shortcut = taken;
+        row.Status.ShouldBe("");
+
+        row.IsRecording = false;
+
+        row.Status.ShouldBe("In use by another app");
+    }
+
+    [Fact]
     public void ShortcutsViewModel_GroupsRowsBySection_AndRestoresDefaults()
     {
         _settings.Current.Shortcuts["leftHalf"] = "Ctrl+Alt+Shift+Left";

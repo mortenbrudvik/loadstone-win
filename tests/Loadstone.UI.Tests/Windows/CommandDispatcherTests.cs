@@ -90,11 +90,19 @@ public class CommandDispatcherTests
         _beeps.ShouldBe(0);
     }
 
-    [Fact]
+    /// <summary>
+    /// The handle comes from a window this test owned and destroyed, never a literal: any value picked
+    /// out of the air may belong to a window on the user's desktop, and the command would move it.
+    /// </summary>
+    [WpfFact]
     public void Run_DestroyedHandle_BeepsAndDoesNotThrow()
     {
+        var test = new TestWindow();
+        var destroyed = test.Handle;
+        test.Dispose();
+
         var dispatcher = NewDispatcher();
-        Should.NotThrow(() => dispatcher.Run(WindowCommand.LeftHalf, hwnd: 0x1234));
+        Should.NotThrow(() => dispatcher.Run(WindowCommand.LeftHalf, destroyed));
         _beeps.ShouldBe(1);
     }
 }

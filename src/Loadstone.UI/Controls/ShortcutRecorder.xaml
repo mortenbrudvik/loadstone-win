@@ -5,7 +5,8 @@
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Focusable="True"
     MinWidth="180"
-    Height="32">
+    Height="32"
+    AutomationProperties.Name="Shortcut">
 
   <Border
       x:Name="Outline"

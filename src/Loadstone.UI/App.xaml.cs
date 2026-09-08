@@ -44,7 +44,11 @@ public partial class App : Application
             return;
         }
 
-        _host = Host.CreateDefaultBuilder()
+        // A bare HostBuilder, not Host.CreateDefaultBuilder: the app has no configuration, and the
+        // default builder would read an appsettings.json out of whatever directory Loadstone was
+        // launched from. What the hosting infrastructure is allowed to write to the log is decided in
+        // LoggingSetup, because NLog does not honour the filters configured here.
+        _host = new HostBuilder()
             .UseServiceProviderFactory(new AutofacServiceProviderFactory())
             .ConfigureContainer<ContainerBuilder>(builder => builder.RegisterModule<AppModule>())
             .ConfigureLogging(logging =>
@@ -89,6 +93,11 @@ public partial class App : Application
         if (_host is not null)
         {
             var services = _host.Services;
+
+            // First of all, so a second launch arriving during shutdown cannot ask for a window from a
+            // container that is on its way out.
+            BestEffort("stop listening for a second launch", () => _showSettingsListener?.Dispose());
+
             var nativeSnap = services.GetRequiredService<NativeSnap>();
             nativeSnap.StopFollowing();
 
@@ -101,7 +110,6 @@ public partial class App : Application
                 BestEffort("release the hotkeys", () => services.GetRequiredService<HotkeyCenter>().Dispose());
                 BestEffort("close the hotkey window", () => services.GetRequiredService<IHotkeyRegistrar>().Dispose());
                 BestEffort("remove the tray icon", () => services.GetRequiredService<TrayController>().Dispose());
-                BestEffort("stop listening for a second launch", () => _showSettingsListener?.Dispose());
             }
             finally
             {

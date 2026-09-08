@@ -112,6 +112,7 @@
                             <controls:ShortcutRecorder
                                 Grid.Column="1"
                                 Margin="12,0,0,0"
+                                AutomationProperties.Name="{Binding Title}"
                                 Shortcut="{Binding Shortcut, Mode=TwoWay}"
                                 IsRecording="{Binding IsRecording, Mode=TwoWay}" />
                           </Grid>

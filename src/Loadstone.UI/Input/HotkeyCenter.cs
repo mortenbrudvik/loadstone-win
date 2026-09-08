@@ -19,6 +19,7 @@ internal sealed class HotkeyCenter : IDisposable
     private readonly ILogger<HotkeyCenter> _logger;
     private readonly Dictionary<WindowCommand, HotkeyStatus> _status = new();
     private readonly Dictionary<WindowCommand, string?> _layoutWarnings = new();
+    private readonly HashSet<WindowCommand> _unparsableReported = [];
     private bool _started;
     private bool _suspended;
 
@@ -129,6 +130,9 @@ internal sealed class HotkeyCenter : IDisposable
 
         _suspended = false;
         RegisterAll();
+
+        // Registration statuses are only real once the center is running again, so tell the rows to re-read them.
+        BindingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void Dispose()
@@ -147,6 +151,7 @@ internal sealed class HotkeyCenter : IDisposable
     private void RegisterOne(WindowCommand command)
     {
         var id = IdOf(command);
+        ReportUnparsableTextOnce(command);
         var shortcut = EffectiveShortcut(command);
         _layoutWarnings[command] = shortcut is null ? null : _probe.CharacterTypedBy(shortcut);
 
@@ -173,6 +178,24 @@ internal sealed class HotkeyCenter : IDisposable
         {
             _logger.LogWarning("{Command}: {Shortcut} types '{Character}' on the active keyboard layout", command.Id(), shortcut, character);
         }
+    }
+
+    /// <summary>
+    /// Stored text that no longer parses is treated as "cleared", which looks the same in the UI as a
+    /// binding the user cleared on purpose. Say so once per command so a hand-edited or migrated
+    /// settings file is diagnosable from the log. An empty string is the deliberate "cleared" value.
+    /// </summary>
+    private void ReportUnparsableTextOnce(WindowCommand command)
+    {
+        if (!_settings.Current.Shortcuts.TryGetValue(command.Id(), out var text)
+            || text.Length == 0
+            || Shortcut.TryParse(text, out _)
+            || !_unparsableReported.Add(command))
+        {
+            return;
+        }
+
+        _logger.LogWarning("{Command}: stored shortcut \"{Text}\" could not be parsed; treating it as unbound", command.Id(), text);
     }
 
     /// <summary>Hotkey ids are 1-based so that id 0, which Windows also uses for "no id", never appears.</summary>

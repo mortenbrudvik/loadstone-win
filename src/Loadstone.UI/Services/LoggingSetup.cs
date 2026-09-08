@@ -21,6 +21,13 @@ internal static class LoggingSetup
             ArchiveAboveSize = 10_000_000,
             MaxArchiveFiles = 14,
         };
+
+        // The console lifetime announces the hosting environment and the content root path at every
+        // launch, which puts an installation path in the user's log for no benefit. Rules are evaluated
+        // in order and this one is final, so those events stop here; a warning from the same logger
+        // still falls through to the file. It has to be an NLog rule: NLog's provider drops the
+        // Microsoft.Extensions.Logging filters by default, so AddFilter would be ignored.
+        config.AddRule(new LoggingRule("Microsoft.Hosting.Lifetime", NLog.LogLevel.Trace, NLog.LogLevel.Info, new NullTarget()) { Final = true });
         config.AddRule(NLog.LogLevel.Debug, NLog.LogLevel.Fatal, new AsyncTargetWrapper(file));
         return config;
     }

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Drawing;
 using System.Windows;
 using System.Windows.Controls;
@@ -6,9 +5,14 @@ using CommunityToolkit.Mvvm.Input;
 using H.NotifyIcon;
 using H.NotifyIcon.Core;
 using Loadstone.Core.Commands;
+using Loadstone.Core.Windows;
 using Loadstone.UI.Input;
+using Loadstone.UI.Interop;
+using Loadstone.UI.Services;
 using Loadstone.UI.Windows;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+using static Loadstone.UI.Interop.NativeMethods;
 
 namespace Loadstone.UI.Tray;
 
@@ -24,16 +28,18 @@ internal sealed class TrayController : IDisposable
     private readonly ICommandDispatcher _dispatcher;
     private readonly HotkeyCenter _hotkeys;
     private readonly IShellActions _shell;
+    private readonly ILogger<TrayController> _logger;
     private readonly ContextMenu _menu = new();
     private readonly TaskbarIcon _icon;
     private Icon? _trayIcon;
-    private nint _capturedForeground;
+    private WindowIdentity? _capturedForeground;
 
-    public TrayController(ICommandDispatcher dispatcher, HotkeyCenter hotkeys, IShellActions shell)
+    public TrayController(ICommandDispatcher dispatcher, HotkeyCenter hotkeys, IShellActions shell, ILogger<TrayController> logger)
     {
         _dispatcher = dispatcher;
         _hotkeys = hotkeys;
         _shell = shell;
+        _logger = logger;
 
         Rebuild();
         _icon = new TaskbarIcon
@@ -70,7 +76,8 @@ internal sealed class TrayController : IDisposable
 
     private void OnTrayLeftMouseUp(object? sender, RoutedEventArgs e) => _shell.OpenSettings();
 
-    private void OnPreviewTrayContextMenuOpen(object? sender, RoutedEventArgs e) => _capturedForeground = FocusedWindow.Resolve() ?? 0;
+    private void OnPreviewTrayContextMenuOpen(object? sender, RoutedEventArgs e) =>
+        _capturedForeground = FocusedWindow.Resolve() is { } hwnd ? new WindowIdentity(hwnd, Win32Window.ProcessIdOf(hwnd)) : null;
 
     private void OnBindingsChanged(object? sender, EventArgs e) => Rebuild();
 
@@ -105,19 +112,36 @@ internal sealed class TrayController : IDisposable
         TrayMenuEntryKind.Quit => new MenuItem { Header = entry.Title, Command = new RelayCommand(_shell.Quit) },
     };
 
+    /// <summary>
+    /// The captured window may have closed while the menu was open, and Windows reuses handles quickly,
+    /// so the identity is re-checked before the command runs: acting on a recycled handle would move a
+    /// window that was never the user's target.
+    /// </summary>
     private void RunCaptured(WindowCommand command)
     {
-        if (_capturedForeground != 0)
-        {
-            _dispatcher.Run(command, _capturedForeground);
-        }
-        else
+        if (_capturedForeground is not { } captured)
         {
             _dispatcher.Run(command);
+            return;
         }
+
+        if (!WindowLiveness.IsAlive(captured) || !WindowStyles.IsManageable(WindowStyles.Snapshot(captured.Hwnd), Environment.ProcessId))
+        {
+            _logger.LogInformation("tray: captured window is gone or not manageable, skipped");
+            User32.MessageBeep(NativeConstants.MB_OK);
+            return;
+        }
+
+        _dispatcher.Run(command, captured.Hwnd);
     }
 
-    private static void OpenHelp() => Process.Start(new ProcessStartInfo(HelpUrl) { UseShellExecute = true });
+    private void OpenHelp()
+    {
+        if (!UriLauncher.TryOpen(HelpUrl, _logger))
+        {
+            User32.MessageBeep(NativeConstants.MB_OK);
+        }
+    }
 
     private void ApplyThemeIcon()
     {

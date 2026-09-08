@@ -7,13 +7,15 @@ namespace Loadstone.UI.Services;
 /// </summary>
 internal static class SingleInstance
 {
-    private const string MutexName = "Loadstone-SingleInstance";
-    private const string EventName = "Loadstone-ShowSettings";
+    // Names are parameters so the tests can use their own: on the production names a test run would
+    // block a running Loadstone from starting, or pop its Settings window.
+    public const string DefaultMutexName = "Loadstone-SingleInstance";
+    public const string DefaultEventName = "Loadstone-ShowSettings";
 
     /// <summary>The mutex to hold for the life of the process, or null when another instance holds it.</summary>
-    public static Mutex? TryAcquire()
+    public static Mutex? TryAcquire(string mutexName = DefaultMutexName)
     {
-        var mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
+        var mutex = new Mutex(initiallyOwned: true, mutexName, out var createdNew);
         if (createdNew)
         {
             return mutex;
@@ -23,16 +25,16 @@ internal static class SingleInstance
         return null;
     }
 
-    public static void SignalShowSettings()
+    public static void SignalShowSettings(string eventName = DefaultEventName)
     {
-        using var handle = new EventWaitHandle(false, EventResetMode.AutoReset, EventName);
+        using var handle = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
         handle.Set();
     }
 
     /// <summary>Calls <paramref name="onSignal"/> on a thread-pool thread each time another instance signals. Dispose to stop listening.</summary>
-    public static IDisposable ListenForShowSettings(Action onSignal)
+    public static IDisposable ListenForShowSettings(Action onSignal, string eventName = DefaultEventName)
     {
-        var handle = new EventWaitHandle(false, EventResetMode.AutoReset, EventName);
+        var handle = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
         var registration = ThreadPool.RegisterWaitForSingleObject(handle, (_, _) => onSignal(), null, Timeout.Infinite, executeOnlyOnce: false);
         return new Listener(registration, handle);
     }

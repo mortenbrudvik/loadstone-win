@@ -76,9 +76,31 @@ internal sealed partial class ShortcutRowViewModel : ObservableObject
         var status = _hotkeys.StatusOf(Command);
         return status.State switch
         {
-            HotkeyState.InUse => "In use by another app",
+            HotkeyState.InUse => SharesItsChordWith() is { } other ? $"Also bound to {other.Title()}" : "In use by another app",
             HotkeyState.Failed => $"Could not register (error {status.Win32Error})",
             _ => _hotkeys.LayoutWarning(Command) is { } character ? $"Types {character} on your keyboard layout" : "",
         };
+    }
+
+    /// <summary>
+    /// Windows reports a chord already taken by another Loadstone row exactly as it reports one taken by
+    /// another application, so name the row instead of blaming an app the user cannot find.
+    /// </summary>
+    private WindowCommand? SharesItsChordWith()
+    {
+        if (_hotkeys.EffectiveShortcut(Command) is not { } chord)
+        {
+            return null;
+        }
+
+        foreach (var other in WindowCommands.All)
+        {
+            if (other != Command && _hotkeys.EffectiveShortcut(other) == chord)
+            {
+                return other;
+            }
+        }
+
+        return null;
     }
 }

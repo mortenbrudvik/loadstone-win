@@ -98,4 +98,44 @@ public sealed class SettingsServiceTests : IDisposable
         File.WriteAllText(SettingsPath, "{ \"dragSnappingEnabled\": false, \"futureSetting\": 42 }");
         NewService().Current.DragSnappingEnabled.ShouldBeFalse();
     }
+
+    /// <summary>A hand-edited null would otherwise reach every reader of the dictionary.</summary>
+    [Fact]
+    public void Load_NullShortcuts_BecomeAnEmptyDictionary()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(SettingsPath, "{ \"shortcuts\": null }");
+
+        var service = NewService();
+
+        service.Current.Shortcuts.ShouldNotBeNull();
+        service.Current.Shortcuts.ShouldBeEmpty();
+    }
+
+    /// <summary>At startup an escaping read failure would be a crash before the tray icon exists.</summary>
+    [Fact]
+    public void Load_UnreadableFile_UsesDefaults()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(SettingsPath, "{ \"dragSnappingEnabled\": false }");
+        using var exclusive = new FileStream(SettingsPath, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var service = NewService();
+
+        service.Current.DragSnappingEnabled.ShouldBeTrue();
+        service.Current.Shortcuts.ShouldBeEmpty();
+    }
+
+    /// <summary>A Settings toggle whose save fails still applies to this run; the binding engine would swallow the throw.</summary>
+    [Fact]
+    public void Save_WhenTheFileCannotBeWritten_KeepsTheChangeInMemory()
+    {
+        Directory.CreateDirectory(SettingsPath + ".tmp");
+        var service = NewService();
+
+        Should.NotThrow(() => service.Update(s => s.DragSnappingEnabled = false));
+
+        service.Current.DragSnappingEnabled.ShouldBeFalse();
+        File.Exists(SettingsPath).ShouldBeFalse();
+    }
 }

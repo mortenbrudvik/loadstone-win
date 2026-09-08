@@ -44,6 +44,10 @@ public sealed class SettingsService : ISettingsService
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Never throws: a settings file that cannot be read or parsed costs the user their customizations,
+    /// not the app. At startup an escaping exception would be a crash before the tray exists.
+    /// </summary>
     private AppSettings Load()
     {
         if (!File.Exists(_path))
@@ -53,23 +57,55 @@ public sealed class SettingsService : ISettingsService
 
         try
         {
-            return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_path), JsonOptions) ?? new AppSettings();
+            var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_path), JsonOptions) ?? new AppSettings();
+
+            // A hand-edited "shortcuts": null deserializes to a null dictionary, which every reader
+            // would then dereference.
+            if (loaded.Shortcuts is null)
+            {
+                loaded.Shortcuts = new();
+            }
+
+            return loaded;
         }
         catch (JsonException ex)
         {
             var backup = _path + ".corrupt";
-            File.Copy(_path, backup, overwrite: true);
-            _logger.LogError(ex, "settings.json could not be parsed; backed it up to {Backup} and using defaults", backup);
+            _logger.LogError(ex, "settings.json could not be parsed; backing it up to {Backup} and using defaults", backup);
+            try
+            {
+                File.Copy(_path, backup, overwrite: true);
+            }
+            catch (Exception copyFailed) when (copyFailed is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogError(copyFailed, "settings.json could not be backed up to {Backup}", backup);
+            }
+
+            return new AppSettings();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogError(ex, "settings.json could not be read; using defaults for this run");
             return new AppSettings();
         }
     }
 
-    /// <summary>Atomic write: serialize to a temp file, then move it over the target.</summary>
+    /// <summary>
+    /// Atomic write: serialize to a temp file, then move it over the target. A failure is logged and
+    /// the change stays in memory, so the toggle the user just flipped still applies to this run.
+    /// </summary>
     private void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        var temp = _path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(Current, JsonOptions));
-        File.Move(temp, _path, overwrite: true);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            var temp = _path + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(Current, JsonOptions));
+            File.Move(temp, _path, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogError(ex, "settings.json could not be written; keeping the change in memory only");
+        }
     }
 }
