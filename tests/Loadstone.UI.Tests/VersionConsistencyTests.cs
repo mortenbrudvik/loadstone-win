@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Loadstone.UI.Services;
 using Shouldly;
 using Xunit;
 
@@ -60,5 +61,20 @@ public sealed class VersionConsistencyTests
     public void AppManifest_AssemblyIdentityVersion_IsVersionJsonWithAZeroRevision()
     {
         Match("src/Loadstone.UI/app.manifest", @"<assemblyIdentity version=""([^""]+)""").ShouldBe($"{VersionInJson()}.0");
+    }
+
+    [Fact]
+    public void AppxManifest_IdentityVersion_IsVersionJsonWithAZeroRevision()
+    {
+        // The leading \s matters: "Version=" is a suffix of "MinVersion=" too, and the leftmost
+        // match would otherwise depend on attribute order.
+        Match("packaging/msix/AppxManifest.xml", @"\sVersion=""(\d+\.\d+\.\d+\.\d+)""").ShouldBe($"{VersionInJson()}.0");
+    }
+
+    /// <summary>The manifest TaskId and the constant the app passes to StartupTask.GetAsync must agree, or GetAsync answers null and launch at login silently does nothing.</summary>
+    [Fact]
+    public void AppxManifest_StartupTaskId_MatchesTheConstant()
+    {
+        Match("packaging/msix/AppxManifest.xml", @"TaskId=""([^""]+)""").ShouldBe(PackagedStartupRegistration.TaskId);
     }
 }

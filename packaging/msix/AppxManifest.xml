@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+    xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+    IgnorableNamespaces="uap uap5 rescap">
+
+  <!-- Name, Publisher and PublisherDisplayName come verbatim from Partner Center's
+       "View app identity details" page. They are case- and punctuation-sensitive and a mismatch is
+       rejected at upload. Version is written by scripts/version-manager.ps1 from version.json; its
+       fourth field is reserved for the Store and must stay 0. -->
+  <Identity
+      Name="PUBLISHER-PLACEHOLDER.Loadstone"
+      Publisher="CN=PUBLISHER-PLACEHOLDER"
+      Version="1.0.0.0"
+      ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Loadstone</DisplayName>
+    <PublisherDisplayName>Morten Brudvik</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <!-- 19041 is what app.manifest already claims and nothing in the app calls a newer API.
+         MinVersion is a commitment to the Store, not a hint. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="Loadstone" Executable="Loadstone.exe" EntryPoint="Windows.FullTrustApplication">
+      <!-- A normal list entry and tile on purpose: AppListEntry="none" would leave a tray-only app
+           with nothing a Store reviewer can launch from the Start menu. -->
+      <uap:VisualElements
+          DisplayName="Loadstone"
+          Description="Snap any window into place: halves, corners, and thirds from the keyboard or by dragging to an edge."
+          BackgroundColor="transparent"
+          Square150x150Logo="Assets\Square150x150Logo.png"
+          Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile ShortName="Loadstone" />
+      </uap:VisualElements>
+      <Extensions>
+        <!-- Enabled="false": the app must not register itself for login without being asked. The
+             Settings toggle turns it on through StartupTask.RequestEnableAsync. TaskId must equal
+             PackagedStartupRegistration.TaskId. -->
+        <uap5:Extension Category="windows.startupTask" Executable="Loadstone.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap5:StartupTask TaskId="LoadstoneStartup" Enabled="false" DisplayName="Loadstone" />
+        </uap5:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- The only capability. runFullTrust is mandatory for a packaged Win32 app and is a restricted
+         capability: it needs a written justification at submission (see the design spec, section 12).
+         No internetClient - Loadstone makes no network calls. -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
