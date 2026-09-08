@@ -95,9 +95,6 @@ public partial class App : Application
 
         // Order matters, as on the Mac: native snap off before the first drag can happen, monitors last.
         nativeSnap.Follow();
-        // Blocking here is temporary. Task 6 queues this onto the dispatcher, once an implementation
-        // that actually awaits is registered.
-        services.GetRequiredService<IStartupRegistration>().InitializeAsync().GetAwaiter().GetResult();
         services.GetRequiredService<TrayController>();
         services.GetRequiredService<HotkeyCenter>().Start();
         var drag = services.GetRequiredService<DragSnapMonitor>();
@@ -114,12 +111,11 @@ public partial class App : Application
         // is already there and not empty, so only a change in it proves this run's own line landed.
         var logLengthBeforeLaunch = LoggingSetup.CurrentLogLength();
         _logger.LogInformation(
-            "launched: version {Version} dragSnapping={Drag} monitoring={Monitoring} nativeSnapSuppressed={Suppressed} startup={Startup}",
+            "launched: version {Version} dragSnapping={Drag} monitoring={Monitoring} nativeSnapSuppressed={Suppressed}",
             typeof(App).Assembly.GetName().Version,
             settings.Current.DragSnappingEnabled,
             drag.IsMonitoring,
-            nativeSnap.IsSuppressing,
-            services.GetRequiredService<IStartupRegistration>().Status);
+            nativeSnap.IsSuppressing);
 
         // Flush it, then look for it. Everything the user could ever be told about this app goes
         // through NLog, and NLog reports nothing when it cannot write, so the answer cannot come
@@ -127,6 +123,24 @@ public partial class App : Application
         // which is the one place a later diagnosis can read it from.
         NLog.LogManager.Flush(LogFlushTimeout);
         LoggingSetup.VerifyWritable(logLengthBeforeLaunch);
+
+        // Package identity has to be asked over an asynchronous WinRT call and OnStartup cannot await:
+        // the dispatcher does not pump until it returns (see the single-instance note above), so an
+        // await here would let a queued second launch build Settings from a half-finished container.
+        // Queue it instead. The Settings window is only ever built on a user action, which cannot
+        // happen before this lands.
+        Dispatcher.BeginInvoke(() => _ = InitializeStartupAsync(services));
+    }
+
+    /// <summary>
+    /// The deferred half of startup. Nothing in here throws: both <see cref="IStartupRegistration"/>
+    /// implementations report failure rather than raising, which is what lets this be fire-and-forget.
+    /// </summary>
+    private static async Task InitializeStartupAsync(IServiceProvider services)
+    {
+        var startup = services.GetRequiredService<IStartupRegistration>();
+        await startup.InitializeAsync();
+        services.GetRequiredService<ILogger<App>>().LogInformation("launch at login: {Startup}", startup.Status);
     }
 
     protected override void OnExit(ExitEventArgs e)

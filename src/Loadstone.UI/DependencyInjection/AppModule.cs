@@ -14,6 +14,18 @@ namespace Loadstone.UI.DependencyInjection;
 
 public sealed class AppModule : Module
 {
+    private readonly IPackageIdentity _identity;
+
+    /// <summary>
+    /// The probe is passed in rather than resolved: this module is configuring the container, so it
+    /// cannot ask it a question, and a test needs to answer the question both ways.
+    /// </summary>
+    internal AppModule(IPackageIdentity identity) => _identity = identity;
+
+    public AppModule() : this(new PackageIdentity())
+    {
+    }
+
     protected override void Load(ContainerBuilder builder)
     {
         // Core
@@ -25,7 +37,19 @@ public sealed class AppModule : Module
         builder.Register(c => new FileNativeSnapMarker(FileNativeSnapMarker.DefaultPath, c.Resolve<ILogger<FileNativeSnapMarker>>()))
             .As<INativeSnapMarker>().SingleInstance();
         builder.RegisterType<NativeSnap>().AsSelf().SingleInstance();
-        builder.RegisterType<RegistryStartupRegistration>().As<IStartupRegistration>().SingleInstance();
+
+        // The one place package identity changes what the app does. Inside a package the Run key
+        // write lands in a private hive that Explorer never reads and still reports success, so the
+        // wrong choice here is invisible at run time.
+        if (_identity.IsPackaged)
+        {
+            builder.RegisterType<PackagedStartupRegistration>().As<IStartupRegistration>().SingleInstance();
+        }
+        else
+        {
+            builder.RegisterType<RegistryStartupRegistration>().As<IStartupRegistration>().SingleInstance();
+        }
+
         // Displays.Source and not Displays.Snapshot: the snapshot abandons the whole list when a
         // monitor cannot be read, which turns every hotkey into a beep, and a source bound to no
         // logger would leave the log the user is told to read with nothing in it about why.
