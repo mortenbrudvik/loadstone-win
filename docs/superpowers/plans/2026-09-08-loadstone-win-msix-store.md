@@ -119,7 +119,7 @@ Run, from the repo root, in the 64-bit PowerShell:
 }
 ```
 
-Hand-author a minimal `AppxManifest.xml` in `$stage` using the shape from Task 11 Step 1, with
+Hand-author a minimal `AppxManifest.xml` in `$stage` using the shape from Task 12 Step 3, with
 `Publisher="CN=LoadstoneSpike"` and a single 44x44 and 150x150 PNG in `$stage\Assets`. Then:
 
 ```powershell
@@ -945,8 +945,13 @@ rather than resolved from the container it is configuring.
     }
 ```
 
-Follow the existing `AppModuleTests` file's usings and its container-building idiom; if that file
-does not exist, create it with `namespace Loadstone.UI.Tests.DependencyInjection;`.
+There is no `AppModuleTests` file today — AppModule's only current coverage is the resolve-everything
+test in `tests/Loadstone.UI.Tests/SmokeTests.cs`. Create
+`tests/Loadstone.UI.Tests/DependencyInjection/AppModuleTests.cs` with
+`namespace Loadstone.UI.Tests.DependencyInjection;`, following SmokeTests' container-building idiom.
+
+`SmokeTests.cs` constructs `new AppModule()`, so the public parameterless constructor must survive
+Step 3 — it is what keeps that test compiling.
 
 - [ ] **Step 2: Run it to make sure it fails**
 
@@ -1000,7 +1005,11 @@ does not pump until it returns, so a second launch arriving mid-`await` would bu
 window from a half-built container. Use `Dispatcher.BeginInvoke`, the repo's existing idiom for
 deferred work.
 
-Remove `startup={Startup}` and its argument from the launch log line at `App.xaml.cs:114`, leaving
+First delete the temporary blocking call Task 3 left at `App.xaml.cs:98`
+(`services.GetRequiredService<IStartupRegistration>().InitializeAsync().GetAwaiter().GetResult();`).
+Leaving it would run initialization twice — once blocking, once queued.
+
+Then remove `startup={Startup}` and its argument from the launch log line at `App.xaml.cs:114`, leaving
 `NLog.LogManager.Flush(...)` and `LoggingSetup.VerifyWritable(...)` as the last two statements — the
 write probe depends on that. Then append, after `VerifyWritable`:
 
@@ -1524,7 +1533,9 @@ Add `using System.IO;` and `using System.Security;` to the file.
 
 - [ ] **Step 4: Add the button**
 
-In `SettingsWindow.xaml`, in the `DockPanel` at lines 55-67. Two right-docked buttons dock in
+In `SettingsWindow.xaml`, in the `DockPanel` that holds the "Open Startup Apps" button — around
+lines 55-67 before Task 7, a few lines lower after it, so find it structurally rather than by number.
+Two right-docked buttons dock in
 declaration order, so the first declared sits rightmost; the existing button has no margin, so give
 the new one a left margin.
 
@@ -1661,7 +1672,8 @@ git commit -m "feat: generate the MSIX image assets"
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `VersionConsistencyTests`:
+Add to `VersionConsistencyTests`. The second test reaches `PackagedStartupRegistration`, so the file
+needs `using Loadstone.UI.Services;` — Task 2 created it without one.
 
 ```csharp
     [Fact]
