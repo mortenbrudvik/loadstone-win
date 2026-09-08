@@ -62,6 +62,11 @@
                       Content="Open Startup Apps"
                       Command="{Binding OpenStartupAppsCommand}"
                       Visibility="{Binding ShowOpenStartupApps, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                  <ui:Button
+                      DockPanel.Dock="Right"
+                      Margin="8,0,0,0"
+                      Content="Open log folder"
+                      Command="{Binding OpenLogFolderCommand}" />
                   <ui:TextBlock
                       VerticalAlignment="Center"
                       Appearance="Secondary"

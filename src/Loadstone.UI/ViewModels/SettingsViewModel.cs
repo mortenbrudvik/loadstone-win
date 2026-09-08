@@ -1,4 +1,6 @@
+using System.IO;
 using System.Reflection;
+using System.Security;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Loadstone.Core.Platform;
@@ -107,6 +109,26 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     [RelayCommand]
     private void OpenStartupApps() => UriLauncher.OpenOrBeep("ms-settings:startupapps", _logger);
+
+    /// <summary>
+    /// Creates the directory before opening it. NLog makes it on first write, so on a run where
+    /// logging failed — exactly when a user is sent looking — it is not there and the shell would
+    /// beep instead of showing anything.
+    /// </summary>
+    [RelayCommand]
+    private void OpenLogFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(LoggingSetup.LogDirectory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
+        {
+            _logger.LogError(ex, "could not create the log directory before opening it");
+        }
+
+        UriLauncher.OpenOrBeep(LoggingSetup.LogDirectory, _logger);
+    }
 
     /// <summary>
     /// Re-reads the registry; the launch-at-login state lives there, not in settings.json. Only

@@ -219,4 +219,14 @@ public class SettingsViewModelTests
         version.ShouldNotContain("+");
         version.ShouldNotBe("?");
     }
+
+    /// <summary>
+    /// Under MSIX the log directory is redirected into the package's LocalCache, so a user cannot be
+    /// told a literal path. The command is the only honest way to point at it.
+    /// </summary>
+    [Fact]
+    public void OpenLogFolder_DoesNotThrow_EvenWhenTheDirectoryIsNotThereYet()
+    {
+        Should.NotThrow(() => NewViewModel().OpenLogFolderCommand.Execute(null));
+    }
 }
