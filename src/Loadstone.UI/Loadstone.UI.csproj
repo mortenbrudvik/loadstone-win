@@ -7,7 +7,7 @@
     <RootNamespace>Loadstone.UI</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\loadstone.ico</ApplicationIcon>
-    <Version>0.1.0</Version>
+    <Version>1.0.0</Version>
     <Product>Loadstone</Product>
     <Company>Morten Brudvik</Company>
     <Copyright>Copyright © 2026 Morten Brudvik</Copyright>
