@@ -97,4 +97,13 @@ public static class VirtualKeys
 
     public static bool IsModifier(int vk) =>
         vk is ShiftKey or ControlKey or MenuKey or LWin or RWin or LShift or RShift or LControl or RControl or LMenu or RMenu;
+
+    /// <summary>
+    /// Whether <paramref name="vk"/> can be the key a chord ends on: a real code in 1..0xFF that is
+    /// not itself a modifier. Both halves have a live source of junk. WPF's KeyInterop.VirtualKeyFromKey
+    /// answers 0 for keys it does not map, and settings.json is hand-editable, so 0 and out-of-range
+    /// codes reach <see cref="Shortcut"/> from outside; a modifier as the chord key would ask
+    /// RegisterHotKey to bind Ctrl to Ctrl.
+    /// </summary>
+    public static bool IsBindable(int vk) => vk is > 0 and <= 0xFF && !IsModifier(vk);
 }

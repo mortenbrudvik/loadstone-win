@@ -96,6 +96,62 @@ public class ShortcutTests
         Shortcut.Parse("Ctrl+Alt+E").ShouldBe(new Shortcut(KeyModifiers.Control | KeyModifiers.Alt, 0x45));
     }
 
+    [Theory]
+    [InlineData(VirtualKeys.ShiftKey)]
+    [InlineData(VirtualKeys.ControlKey)]
+    [InlineData(VirtualKeys.MenuKey)]
+    [InlineData(VirtualKeys.LWin)]
+    [InlineData(VirtualKeys.RWin)]
+    [InlineData(VirtualKeys.LMenu)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(0x100)]
+    public void Constructor_RejectsAKeyThatCannotEndAChord(int virtualKey)
+    {
+        // ToString is the settings format: new Shortcut(mods, 0) wrote "Ctrl+Alt+Vk0x00", which TryParse
+        // then refused, so the command came back unbound on the next launch with nothing logged.
+        Should.Throw<ArgumentOutOfRangeException>(
+            () => new Shortcut(KeyModifiers.Control | KeyModifiers.Alt, virtualKey));
+    }
+
+    [Theory]
+    [InlineData("Ctrl+Vk0x10")]
+    [InlineData("Ctrl+Alt+Vk0x11")]
+    [InlineData("Ctrl+Alt+Vk0xA0")]
+    [InlineData("Ctrl+Alt+Vk0x00")]
+    [InlineData("Ctrl+Alt+Vk0x100")]
+    public void TryParse_RejectsAKeyThatCannotEndAChord(string text)
+    {
+        // Hand-edited settings reach this path, so the constructor's guard must be answered with false
+        // here rather than thrown out of a TryParse.
+        Shortcut.TryParse(text, out var shortcut).ShouldBeFalse(text);
+        shortcut.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("Ctrl+Alt+A", true)]
+    [InlineData("Shift+Backspace", true)]
+    [InlineData("F5", true)]
+    [InlineData("Shift+F24", true)]
+    [InlineData("A", false)]
+    [InlineData("Backspace", false)]
+    public void IsUsable_RequiresModifiers_ExceptOnAFunctionKey(string text, bool usable)
+    {
+        // A hand-edited "restore": "Backspace" parses fine, and RegisterHotKey would then swallow
+        // Backspace in every app on the machine.
+        Shortcut.Parse(text).IsUsable.ShouldBe(usable, text);
+    }
+
+    [Fact]
+    public void IsBindable_RejectsModifiersAndCodesOutsideOneToFF()
+    {
+        VirtualKeys.IsBindable(0).ShouldBeFalse();
+        VirtualKeys.IsBindable(0x100).ShouldBeFalse();
+        VirtualKeys.IsBindable(VirtualKeys.ShiftKey).ShouldBeFalse();
+        VirtualKeys.IsBindable(VirtualKeys.Backspace).ShouldBeTrue();
+        VirtualKeys.IsBindable(0xFF).ShouldBeTrue();
+    }
+
     [Fact]
     public void IsModifier_RecognisesEveryModifierCode()
     {

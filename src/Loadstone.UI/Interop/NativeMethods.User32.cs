@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace Loadstone.UI.Interop;
 
@@ -10,7 +10,7 @@ internal static partial class NativeMethods
 
         internal delegate void WinEventProc(nint hWinEventHook, uint eventType, nint hwnd, int idObject, int idChild, uint idEventThread, uint dwmsEventTime);
 
-        [LibraryImport("user32.dll")]
+        [LibraryImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool EnumDisplayMonitors(nint hdc, nint lprcClip, MonitorEnumProc lpfnEnum, nint dwData);
 
@@ -20,6 +20,15 @@ internal static partial class NativeMethods
 
         [LibraryImport("user32.dll")]
         internal static partial nint GetForegroundWindow();
+
+        /// <summary>
+        /// Hands this process's foreground right to another one. A background process cannot call
+        /// SetForegroundWindow for itself, so the second Loadstone instance donates its right - it was
+        /// just launched by the user, so it holds one - before signalling the first to show Settings.
+        /// </summary>
+        [LibraryImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool AllowSetForegroundWindow(int dwProcessId);
 
         [LibraryImport("user32.dll")]
         internal static partial nint GetAncestor(nint hwnd, uint gaFlags);
@@ -48,6 +57,8 @@ internal static partial class NativeMethods
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
+        // No SetLastError: ShowWindow's BOOL says the window *was previously visible*, not that the call
+        // succeeded, so a false return is not a failure and GetLastError would carry stale noise.
         [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool ShowWindow(nint hWnd, int nCmdShow);
@@ -59,13 +70,13 @@ internal static partial class NativeMethods
         [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
         internal static partial nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong);
 
-        [LibraryImport("user32.dll", EntryPoint = "GetClassNameW", StringMarshalling = StringMarshalling.Utf16)]
+        [LibraryImport("user32.dll", EntryPoint = "GetClassNameW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
         internal static partial int GetClassName(nint hWnd, [Out] char[] lpClassName, int nMaxCount);
 
-        [LibraryImport("user32.dll")]
+        [LibraryImport("user32.dll", SetLastError = true)]
         internal static partial uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
 
-        [LibraryImport("user32.dll")]
+        [LibraryImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool GetCursorPos(out POINT lpPoint);
 
@@ -95,9 +106,6 @@ internal static partial class NativeMethods
         [LibraryImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool MessageBeep(uint uType);
-
-        [LibraryImport("user32.dll")]
-        internal static partial uint GetDpiForWindow(nint hwnd);
 
         [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
         internal static partial int ToUnicodeEx(uint wVirtKey, uint wScanCode, [In] byte[] lpKeyState, [Out] char[] pwszBuff, int cchBuff, uint wFlags, nint dwhkl);

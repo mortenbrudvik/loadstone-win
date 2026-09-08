@@ -38,33 +38,42 @@ public class SettingsViewModelTests
     public void LaunchAtLogin_On_EnablesRegistration()
     {
         _startup.Status.Returns(StartupStatus.NotRegistered, StartupStatus.Enabled);
+        _startup.Enable().Returns(true);
         var vm = NewViewModel();
         vm.LaunchAtLogin = true;
         _startup.Received(1).Enable();
         vm.LaunchAtLogin.ShouldBeTrue();
+        vm.LaunchAtLoginMessage.ShouldBe("");
     }
 
     [Fact]
     public void LaunchAtLogin_Off_DisablesRegistration()
     {
         _startup.Status.Returns(StartupStatus.Enabled, StartupStatus.NotRegistered);
+        _startup.Disable().Returns(true);
         var vm = NewViewModel();
         vm.LaunchAtLogin = false;
         _startup.Received(1).Disable();
         vm.LaunchAtLogin.ShouldBeFalse();
+        vm.LaunchAtLoginMessage.ShouldBe("");
     }
 
+    /// <summary>
+    /// The registry refusing the write is reported, not thrown, so the rollback is the view model's
+    /// job: re-read the registry and say so. Symptom if this regresses: the toggle stays on while
+    /// nothing is registered, and the user is told nothing.
+    /// </summary>
     [Fact]
     public void LaunchAtLogin_WhenTheRegistryWriteFails_RollsBackAndExplains()
     {
         _startup.Status.Returns(StartupStatus.NotRegistered);
-        _startup.When(s => s.Enable()).Do(_ => throw new UnauthorizedAccessException("denied"));
+        _startup.Enable().Returns(false);
         var vm = NewViewModel();
 
         vm.LaunchAtLogin = true;
 
         vm.LaunchAtLogin.ShouldBeFalse();
-        vm.LaunchAtLoginMessage.ShouldContain("denied");
+        vm.LaunchAtLoginMessage.ShouldContain("refused");
         _startup.Received(1).Enable();
     }
 
@@ -78,9 +87,35 @@ public class SettingsViewModelTests
         vm.LaunchAtLoginMessage.ShouldContain("Task Manager");
     }
 
+    /// <summary>
+    /// A policy or an ACL can deny the Run key outright, and this constructor runs on the UI thread
+    /// with no handler over it. Symptom if the read ever throws again: opening Settings from the tray
+    /// ends the process, taking the hotkeys and the user's edge snapping with it. Unknown is not off,
+    /// so the box stays clear - a ticked box the user cannot untick is the worse lie.
+    /// </summary>
     [Fact]
-    public void Version_IsNotEmpty()
+    public void Construction_WhenTheRegistryCannotBeRead_LeavesTheWindowUsable()
     {
-        NewViewModel().Version.ShouldNotBeNullOrWhiteSpace();
+        _startup.Status.Returns(StartupStatus.Unknown);
+
+        var vm = Should.NotThrow(NewViewModel);
+
+        vm.LaunchAtLogin.ShouldBeFalse();
+        vm.ShowOpenStartupApps.ShouldBeFalse();
+        vm.LaunchAtLoginMessage.ShouldContain("Could not read");
+    }
+
+    /// <summary>
+    /// The About card shows a version, not a commit: the informational version carries a "+sha" suffix
+    /// on any build with source link, and the split is the only thing that keeps it off the card.
+    /// </summary>
+    [Fact]
+    public void Version_IsTheInformationalVersionWithoutItsBuildMetadata()
+    {
+        var version = NewViewModel().Version;
+
+        version.ShouldNotBeNullOrWhiteSpace();
+        version.ShouldNotContain("+");
+        version.ShouldNotBe("?");
     }
 }

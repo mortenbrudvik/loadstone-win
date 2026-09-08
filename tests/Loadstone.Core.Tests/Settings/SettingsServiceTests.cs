@@ -39,6 +39,8 @@ public sealed class SettingsServiceTests : IDisposable
             s.DragSnappingEnabled = false;
             s.Shortcuts["leftHalf"] = "Ctrl+Alt+Shift+Left";
             s.Shortcuts["center"] = "";
+            // Migration only: the crash marker has its own store now, but a settings.json written
+            // by an older build still has to round-trip so NativeSnap can pick that marker up once.
             s.NativeSnapPreviousValues = new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = false };
         });
 
@@ -78,6 +80,37 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void Update_WhenTheSaveReachesDisk_ReturnsTrue()
+    {
+        NewService().Update(s => s.DragSnappingEnabled = false).ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// One subscriber that threw used to abort the notification part-way: the handlers registered
+    /// after it never heard about a change that had already been saved, so the tray menu and the
+    /// hotkeys stayed on the old settings until the next restart. It also surfaced as a throw out
+    /// of whatever flipped the toggle, which in a Settings binding is a silent no-op.
+    /// </summary>
+    [Fact]
+    public void Update_WhenASubscriberThrows_StillNotifiesTheRest_AndDoesNotReachTheCaller()
+    {
+        var service = NewService();
+        var before = 0;
+        var after = 0;
+        service.Changed += (_, _) => before++;
+        service.Changed += (_, _) => throw new InvalidOperationException("a Changed subscriber blew up");
+        service.Changed += (_, _) => after++;
+
+        // A propagating exception fails the test here, before any assertion runs.
+        var saved = service.Update(s => s.DragSnappingEnabled = false);
+
+        before.ShouldBe(1);
+        after.ShouldBe(1);
+        saved.ShouldBeTrue();
+        NewService().Current.DragSnappingEnabled.ShouldBeFalse();
+    }
+
+    [Fact]
     public void Load_CorruptFile_BacksItUpAndUsesDefaults()
     {
         Directory.CreateDirectory(_directory);
@@ -89,6 +122,25 @@ public sealed class SettingsServiceTests : IDisposable
 
         service.Update(s => s.DragSnappingEnabled = false);
         NewService().Current.DragSnappingEnabled.ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// Load runs in the constructor, so anything it throws is a crash before the tray icon exists:
+    /// no window, no message, a process that never appeared. The awkward shape is a corrupt file
+    /// whose backup also fails, because that failure happens inside the handler for the first one.
+    /// A SecurityException from a locked-down profile is caught in the same arm as this copy.
+    /// </summary>
+    [Fact]
+    public void Load_CorruptFile_WhenTheBackupCannotBeWritten_StillUsesDefaults()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(SettingsPath, "{ this is not json");
+        Directory.CreateDirectory(SettingsPath + ".corrupt"); // the copy target is a directory
+
+        var service = NewService();
+
+        service.Current.DragSnappingEnabled.ShouldBeTrue();
+        service.Current.Shortcuts.ShouldBeEmpty();
     }
 
     [Fact]
@@ -112,7 +164,12 @@ public sealed class SettingsServiceTests : IDisposable
         service.Current.Shortcuts.ShouldBeEmpty();
     }
 
-    /// <summary>At startup an escaping read failure would be a crash before the tray icon exists.</summary>
+    /// <summary>
+    /// At startup an escaping read failure would be a crash before the tray icon exists, and Load
+    /// runs in the constructor, so every read failure has to come back as defaults: the lock here
+    /// (IOException), a denied file (UnauthorizedAccessException), and a SecurityException from a
+    /// locked-down profile, which shares their catch arm but cannot be provoked in-process.
+    /// </summary>
     [Fact]
     public void Load_UnreadableFile_UsesDefaults()
     {
@@ -126,15 +183,21 @@ public sealed class SettingsServiceTests : IDisposable
         service.Current.Shortcuts.ShouldBeEmpty();
     }
 
-    /// <summary>A Settings toggle whose save fails still applies to this run; the binding engine would swallow the throw.</summary>
+    /// <summary>
+    /// A Settings toggle whose save fails still applies to this run; the binding engine would
+    /// swallow the throw. The false return is the only way a caller whose next step is unsafe
+    /// unless the change survives a force-quit can find out, so it is pinned here too.
+    /// </summary>
     [Fact]
-    public void Save_WhenTheFileCannotBeWritten_KeepsTheChangeInMemory()
+    public void Update_WhenTheFileCannotBeWritten_ReturnsFalse_ButKeepsTheChangeInMemory()
     {
         Directory.CreateDirectory(SettingsPath + ".tmp");
         var service = NewService();
 
-        Should.NotThrow(() => service.Update(s => s.DragSnappingEnabled = false));
+        var saved = true;
+        Should.NotThrow(() => { saved = service.Update(s => s.DragSnappingEnabled = false); });
 
+        saved.ShouldBeFalse();
         service.Current.DragSnappingEnabled.ShouldBeFalse();
         File.Exists(SettingsPath).ShouldBeFalse();
     }

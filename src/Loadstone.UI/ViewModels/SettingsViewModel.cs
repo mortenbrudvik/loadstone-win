@@ -1,14 +1,10 @@
-using System.IO;
 using System.Reflection;
-using System.Security;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Loadstone.Core.Platform;
 using Loadstone.Core.Settings;
-using Loadstone.UI.Interop;
 using Loadstone.UI.Services;
 using Microsoft.Extensions.Logging;
-using static Loadstone.UI.Interop.NativeMethods;
 
 namespace Loadstone.UI.ViewModels;
 
@@ -26,9 +22,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _startup = startup;
         _logger = logger;
         LaunchAtLoginMessage = "";
-        _applying = true;
-        DragSnappingEnabled = settings.Current.DragSnappingEnabled;
-        _applying = false;
+        WithoutSideEffects(() => DragSnappingEnabled = settings.Current.DragSnappingEnabled);
         RefreshStartup();
     }
 
@@ -60,8 +54,13 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The setter re-enters itself on rollback (the assignment below goes through the same
-    /// generated setter), so the guard is what stops a failing Enable from recursing forever.
+    /// The setter re-enters itself (<see cref="RefreshStartup"/> puts the registry's answer back
+    /// through this same generated setter), so the guard is what stops a refused write from
+    /// recursing forever. The guard is set by hand here rather than through
+    /// <see cref="WithoutSideEffects"/> because it has to cover the registry call as well as the
+    /// assignments. Nothing catches: <see cref="IStartupRegistration.Enable"/> reports a refusal
+    /// instead of throwing, and the rollback is simply re-reading the registry - the only thing that
+    /// knows the truth after a write that may have half landed.
     /// </summary>
     partial void OnLaunchAtLoginChanged(bool value)
     {
@@ -73,22 +72,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _applying = true;
         try
         {
-            if (value)
-            {
-                _startup.Enable();
-            }
-            else
-            {
-                _startup.Disable();
-            }
-
+            var written = value ? _startup.Enable() : _startup.Disable();
             RefreshStartup();
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or InvalidOperationException or SecurityException)
-        {
-            _logger.LogError(ex, "Launch at login {Action} failed", value ? "enable" : "disable");
-            LaunchAtLoginMessage = $"Could not change Launch at login: {ex.Message}";
-            LaunchAtLogin = _startup.Status != StartupStatus.NotRegistered;
+            if (!written)
+            {
+                LaunchAtLoginMessage = "Could not change Launch at login; Windows refused the registry write.";
+            }
         }
         finally
         {
@@ -97,32 +86,46 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenStartupApps()
-    {
-        if (!UriLauncher.TryOpen("ms-settings:startupapps", _logger))
-        {
-            User32.MessageBeep(NativeConstants.MB_OK);
-        }
-    }
+    private void OpenStartupApps() => UriLauncher.OpenOrBeep("ms-settings:startupapps", _logger);
 
-    /// <summary>Re-reads the registry; the launch-at-login state lives there, not in settings.json.</summary>
+    /// <summary>
+    /// Re-reads the registry; the launch-at-login state lives there, not in settings.json. Only
+    /// <see cref="StartupStatus.Enabled"/> and <see cref="StartupStatus.DisabledInTaskManager"/> tick
+    /// the box: <see cref="StartupStatus.Unknown"/> means the key would not open, and a ticked box
+    /// the user cannot untick is a worse lie than an unticked one.
+    /// </summary>
     public void RefreshStartup()
     {
         var status = _startup.Status;
-        var wasApplying = _applying;
+        WithoutSideEffects(() => LaunchAtLogin = status is StartupStatus.Enabled or StartupStatus.DisabledInTaskManager);
+
+        ShowOpenStartupApps = status == StartupStatus.DisabledInTaskManager;
+        LaunchAtLoginMessage = status switch
+        {
+            StartupStatus.DisabledInTaskManager => "Disabled in Task Manager › Startup apps.",
+            StartupStatus.Unknown => "Could not read Launch at login; Windows refused the registry.",
+            _ => "",
+        };
+    }
+
+    /// <summary>
+    /// Runs <paramref name="assign"/> with the property setters' side effects off, so showing state
+    /// that was just read does not write it straight back. Saves and restores the flag rather than
+    /// clearing it, because it nests: <see cref="RefreshStartup"/> also runs from inside
+    /// <see cref="OnLaunchAtLoginChanged"/>, which set the flag first and still needs it set when
+    /// this returns.
+    /// </summary>
+    private void WithoutSideEffects(Action assign)
+    {
+        var was = _applying;
         _applying = true;
         try
         {
-            LaunchAtLogin = status != StartupStatus.NotRegistered;
+            assign();
         }
         finally
         {
-            _applying = wasApplying;
+            _applying = was;
         }
-
-        ShowOpenStartupApps = status == StartupStatus.DisabledInTaskManager;
-        LaunchAtLoginMessage = status == StartupStatus.DisabledInTaskManager
-            ? "Disabled in Task Manager › Startup apps."
-            : "";
     }
 }

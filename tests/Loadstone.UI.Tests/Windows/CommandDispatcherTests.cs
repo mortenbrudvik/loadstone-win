@@ -19,13 +19,20 @@ public class CommandDispatcherTests
         () => _focused,
         () => _beeps++);
 
+    /// <summary>
+    /// The identity the tray path captures: the handle together with the pid read beside it, while the
+    /// window is still alive. The dispatcher's second overload takes exactly this and no longer
+    /// re-derives the pid, which is what stops a recycled handle being treated as the same window.
+    /// </summary>
+    private static WindowIdentity Captured(TestWindow test) => Win32Window.For(test.Handle).ShouldNotBeNull().Identity;
+
     [WpfFact]
-    public void Run_WithHandle_MovesTheWindow_Silently()
+    public void Run_WithACapturedIdentity_MovesTheWindow_Silently()
     {
         using var test = new TestWindow();
         var dispatcher = NewDispatcher();
 
-        dispatcher.Run(WindowCommand.LeftHalf, test.Handle);
+        dispatcher.Run(WindowCommand.LeftHalf, Captured(test));
         TestWindow.Pump();
 
         var displays = Displays.Snapshot();
@@ -43,7 +50,7 @@ public class CommandDispatcherTests
         using var test = new TestWindow();
         var dispatcher = NewDispatcher();
 
-        dispatcher.Run(WindowCommand.Restore, test.Handle);
+        dispatcher.Run(WindowCommand.Restore, Captured(test));
         _beeps.ShouldBe(1);
     }
 
@@ -52,11 +59,12 @@ public class CommandDispatcherTests
     {
         using var test = new TestWindow();
         var before = Win32Window.VisibleFrame(test.Handle).ShouldNotBeNull();
+        var target = Captured(test);
         var dispatcher = NewDispatcher();
 
-        dispatcher.Run(WindowCommand.TopRight, test.Handle);
+        dispatcher.Run(WindowCommand.TopRight, target);
         TestWindow.Pump();
-        dispatcher.Run(WindowCommand.Restore, test.Handle);
+        dispatcher.Run(WindowCommand.Restore, target);
         TestWindow.Pump();
 
         var after = Win32Window.VisibleFrame(test.Handle).ShouldNotBeNull();
@@ -91,14 +99,36 @@ public class CommandDispatcherTests
     }
 
     /// <summary>
-    /// The handle comes from a window this test owned and destroyed, never a literal: any value picked
-    /// out of the air may belong to a window on the user's desktop, and the command would move it.
+    /// The resolver can hand back a window that died between the hotkey and the command. Its owning
+    /// process no longer reads, so there is no honest identity to record; the command must beep rather
+    /// than enter the restore ledger under a guessed pid, where it would compare equal to every other
+    /// unreadable window and Restore would move a stranger. The handle comes from a window this test
+    /// owned and destroyed, never a literal: any value picked out of the air may belong to a window on
+    /// the user's desktop.
     /// </summary>
     [WpfFact]
-    public void Run_DestroyedHandle_BeepsAndDoesNotThrow()
+    public void Run_WhenTheFocusedWindowsProcessCannotBeRead_BeepsAndDoesNotThrow()
     {
         var test = new TestWindow();
-        var destroyed = test.Handle;
+        _focused = test.Handle;
+        test.Dispose();
+
+        var dispatcher = NewDispatcher();
+        Should.NotThrow(() => dispatcher.Run(WindowCommand.LeftHalf));
+        _beeps.ShouldBe(1);
+    }
+
+    /// <summary>
+    /// The identity is captured while the window lives and used after it is gone — the tray menu's own
+    /// shape, where the user's window can close while the menu is open. The handle comes from a window
+    /// this test owned and destroyed, never a literal: any value picked out of the air may belong to a
+    /// window on the user's desktop, and the command would move it.
+    /// </summary>
+    [WpfFact]
+    public void Run_WithAnIdentityWhoseWindowIsGone_BeepsAndDoesNotThrow()
+    {
+        var test = new TestWindow();
+        var destroyed = Captured(test);
         test.Dispose();
 
         var dispatcher = NewDispatcher();

@@ -11,13 +11,6 @@ namespace Loadstone.UI.Input;
 /// </summary>
 internal sealed class KeyboardLayoutProbe : IKeyboardLayoutProbe
 {
-    private const int VK_SHIFT = 0x10;
-    private const int VK_CONTROL = 0x11;
-    private const int VK_MENU = 0x12;
-    private const int VK_LSHIFT = 0xA0;
-    private const int VK_LCONTROL = 0xA2;
-    private const int VK_RMENU = 0xA5;
-
     public string? CharacterTypedBy(Shortcut shortcut)
     {
         var modifiers = shortcut.Modifiers;
@@ -27,15 +20,25 @@ internal sealed class KeyboardLayoutProbe : IKeyboardLayoutProbe
         }
 
         var layout = User32.GetKeyboardLayout(ForegroundThreadId());
+
+        // All four entries are load-bearing: together they are the AltGr synthesis, and this is the
+        // whole trick the class exists for. ToUnicodeEx decides "is a modifier held at all?" from the
+        // generic VK_CONTROL/VK_MENU entries, but it only produces the AltGr character once the sided
+        // VK_LCONTROL and VK_RMENU are down too — AltGr is physically Right-Alt, and Windows delivers
+        // it as Left-Ctrl + Right-Alt. Set only the generic pair and the layout answers with the plain
+        // Ctrl+Alt result (usually nothing); set only the sided pair and it answers as if no modifier
+        // were held. Either way the probe quietly reports "types nothing", Ctrl+Alt+E stops being
+        // flagged as the € key on a Norwegian layout, and the warning this class ships silently dies.
+        // Do not thin this to two entries.
         var state = new byte[256];
-        state[VK_CONTROL] = 0x80;
-        state[VK_LCONTROL] = 0x80;
-        state[VK_MENU] = 0x80;
-        state[VK_RMENU] = 0x80;
+        state[VirtualKeys.ControlKey] = 0x80;
+        state[VirtualKeys.LControl] = 0x80;
+        state[VirtualKeys.MenuKey] = 0x80;
+        state[VirtualKeys.RMenu] = 0x80;
         if (modifiers.HasFlag(KeyModifiers.Shift))
         {
-            state[VK_SHIFT] = 0x80;
-            state[VK_LSHIFT] = 0x80;
+            state[VirtualKeys.ShiftKey] = 0x80;
+            state[VirtualKeys.LShift] = 0x80;
         }
 
         var scanCode = User32.MapVirtualKeyEx((uint)shortcut.VirtualKey, NativeConstants.MAPVK_VK_TO_VSC, layout);
@@ -46,8 +49,10 @@ internal sealed class KeyboardLayoutProbe : IKeyboardLayoutProbe
             return null;
         }
 
+        // A dead key or a control character is not something the user can see themselves losing, so it
+        // is not worth a warning.
         var text = new string(buffer, 0, count);
-        return text.Length == 0 || text.Any(char.IsControl) || string.IsNullOrWhiteSpace(text) ? null : text;
+        return text.Any(char.IsControl) || string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
     private static uint ForegroundThreadId()

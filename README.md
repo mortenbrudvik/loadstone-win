@@ -25,11 +25,11 @@ Loadstone sits in the tray and stays out of the way. When you need two documents
 - **Thirds** — left, center, right, plus two-thirds
 - **Maximize, center, restore** — restore puts the window back where it was before Loadstone first moved it
 - **Drag to snap** — edges for halves, corners for quarters, top to maximize, bottom for thirds. Only a window that is actually being moved snaps; selecting text or resizing near an edge does nothing
-- **Multi-display** — send a window to the next or previous display, walking displays left to right as they sit on the desk, with the window's size scaled for the display's DPI
+- **Multi-display** — send a window to the next or previous display, walking displays left to right as they sit on the desk. The window keeps the place and the proportion of the work area it had, so a half stays a half. The mapping is by pixel size, not DPI: on a display with the same pixel dimensions but heavier scaling, the window keeps its pixel size and so looks physically smaller
 - **Custom shortcuts** — Magnet-style defaults, all editable, with a warning when a chord is taken by another app or types a character on your keyboard layout
 - **Launch at login** — optional, from Settings
 
-Loadstone turns off Windows' own drag-to-edge snapping while its drag snapping is on, so the two don't fight, and turns it back on when it quits or when you switch drag snapping off. If Loadstone is killed before it can put the setting back, the next launch notices and restores it. Win+Arrow and Snap Layouts are untouched.
+Loadstone turns off Windows' own drag-to-edge snapping while its drag snapping is on, so the two don't fight, and turns it back on when it quits or when you switch drag snapping off. If Loadstone is killed before it can put the setting back, the next launch notices and restores it. The two flags it changes are the drag-to-edge ones, so Win+Arrow and Snap Layouts should be unaffected — but only drag drops were tried when this was measured, so neither is verified.
 
 ## Default shortcuts
 
@@ -58,7 +58,7 @@ On Norwegian, German, and most other European layouts, AltGr is Ctrl+Alt to Wind
 
 ## Drag to snap
 
-Drag a window by its title bar until the pointer reaches an edge or corner of the display. A blue preview shows the tile; let go to snap. Only a window that is actually moving snaps, so selecting text or dragging a slider to an edge does nothing.
+Drag a window by its title bar until the pointer reaches an edge or corner of the display. A preview in the system accent color shows the tile; let go to snap. Only a window that is actually moving snaps, so selecting text or dragging a slider to an edge does nothing.
 
 <p align="center">
   <img src="docs/snap-zones.svg" alt="Drag zones: corners give quarters, the sides give halves, the top edge maximizes, the bottom edge gives thirds; on a portrait display the sides give corner, vertical third, corner and the bottom edge gives halves" width="960">
@@ -75,7 +75,7 @@ The edge zones are 16 px deep at 100% scaling and extend the same distance past 
 
 ## Install
 
-No release is published yet; the installer is the next step. Once one exists, download `Loadstone-<version>-Setup.exe` from the [latest release](https://github.com/mortenbrudvik/loadstone-win/releases/latest) and run it. It installs for the current user, no administrator rights needed, and adds a Start Menu entry. Windows 10 or 11, x64.
+No release is published yet; the installer is the next step. Once one exists, download `Loadstone-<version>-Setup.exe` from the [latest release](https://github.com/mortenbrudvik/loadstone-win/releases/latest) and run it. It installs for the current user, no administrator rights needed, and adds a Start Menu entry. Windows 10 or 11, x64 — the app manifest declares both, and nothing in the app calls an API newer than Windows 10. The `net10.0-windows10.0.26100.0` target framework looks like a 24H2 floor but is not one: it only sets the baseline the platform-compatibility analyzer checks against. Development and testing have all been on Windows 11, so Windows 10 is declared rather than verified.
 
 Optional: **Settings → Launch at login**.
 
@@ -92,7 +92,7 @@ dotnet run --project src/Loadstone.UI
 
 ## Troubleshooting
 
-Tray → Loadstone → **Loadstone Help** opens this page.
+Tray → Loadstone → **Loadstone Help** opens this page at `https://github.com/mortenbrudvik/loadstone-win#readme`. Known issue: the repository is not published yet, so that link 404s until it is.
 
 **One window will not move.** Windows of programs running as administrator cannot be moved by a program that isn't, and some windows are fixed-size. Loadstone beeps and logs the refusal; everything else keeps working. Fixed-size windows are centered in the tile instead of resized.
 
@@ -120,7 +120,7 @@ dotnet test --project tests/Loadstone.UI.Tests/Loadstone.UI.Tests.csproj --filte
 & 'C:\Program Files\PowerShell\7\pwsh.exe' -File tools/icons/generate.ps1   # regenerate the .ico assets
 ```
 
-`global.json` opts the repo into the Microsoft.Testing.Platform runner (xunit.v3), so the classic `dotnet test Loadstone.sln` and `--filter`/`--logger` switches do not apply; use `--solution`/`--project`, `--filter-query`, and `--report-trx`.
+`global.json` opts the repo into the Microsoft.Testing.Platform runner (xunit.v3), so a positional `dotnet test Loadstone.slnx` and `--logger` do not apply; use `--solution`/`--project` and `--report-trx`. Filtering still works: `--filter` takes VSTest syntax, and xunit.v3 adds `--filter-class`, `--filter-method`, `--filter-namespace`, `--filter-trait` and their `--filter-not-*` variants. Use one family per run — `--filter` cannot be combined with `--filter-query` or the simple filters.
 
 ## How it works
 

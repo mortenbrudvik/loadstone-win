@@ -14,7 +14,11 @@ namespace Loadstone.UI.Input;
 internal sealed class HotkeyRegistrar : IHotkeyRegistrar
 {
     private readonly HwndSource _source;
-    private readonly HashSet<int> _registered = [];
+
+    // Every hotkey id this window currently holds, mapped back to the command that owns it. The id is
+    // an implementation detail now, and this map is its only decoder: a WM_HOTKEY for an id we do not
+    // hold is dropped rather than cast into a WindowCommand nobody registered.
+    private readonly Dictionary<int, WindowCommand> _registered = [];
 
     public HotkeyRegistrar()
     {
@@ -31,14 +35,17 @@ internal sealed class HotkeyRegistrar : IHotkeyRegistrar
 
     public nint Handle => _source.Handle;
 
-    public event Action<int>? HotkeyPressed;
+    public event Action<WindowCommand>? HotkeyPressed;
 
-    public HotkeyStatus Register(int id, Shortcut shortcut)
+    public HotkeyStatus Register(WindowCommand command, Shortcut shortcut)
     {
-        Unregister(id);
+        var id = IdOf(command);
+        _ = Unregister(command);
         if (User32.RegisterHotKey(Handle, id, (uint)shortcut.Modifiers | NativeConstants.MOD_NOREPEAT, (uint)shortcut.VirtualKey))
         {
-            _registered.Add(id);
+            // Indexer rather than Add: an Unregister that Windows refused deliberately leaves the id
+            // in the map, and Add would then throw instead of re-recording the same command.
+            _registered[id] = command;
             return HotkeyStatus.Registered;
         }
 
@@ -46,19 +53,34 @@ internal sealed class HotkeyRegistrar : IHotkeyRegistrar
         return error == NativeConstants.ERROR_HOTKEY_ALREADY_REGISTERED ? HotkeyStatus.InUse(error) : HotkeyStatus.Failed(error);
     }
 
-    public void Unregister(int id)
+    public HotkeyStatus Unregister(WindowCommand command)
     {
-        if (_registered.Remove(id))
+        var id = IdOf(command);
+        if (!_registered.ContainsKey(id))
         {
-            User32.UnregisterHotKey(Handle, id);
+            return HotkeyStatus.Unbound;
         }
+
+        if (!User32.UnregisterHotKey(Handle, id))
+        {
+            // Windows kept the chord, so keep the id: Dispose gets another try at it, and a press that
+            // does still arrive is routed instead of silently dropped. The caller decides what to say.
+            return HotkeyStatus.NotReleased(Marshal.GetLastWin32Error());
+        }
+
+        _registered.Remove(id);
+        return HotkeyStatus.Unbound;
     }
 
     private nint WndProc(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
     {
         if (msg == NativeConstants.WM_HOTKEY)
         {
-            HotkeyPressed?.Invoke((int)wParam);
+            if (_registered.TryGetValue((int)wParam, out var command))
+            {
+                HotkeyPressed?.Invoke(command);
+            }
+
             handled = true;
         }
 
@@ -67,7 +89,7 @@ internal sealed class HotkeyRegistrar : IHotkeyRegistrar
 
     public void Dispose()
     {
-        foreach (var id in _registered)
+        foreach (var id in _registered.Keys)
         {
             User32.UnregisterHotKey(Handle, id);
         }
@@ -76,4 +98,6 @@ internal sealed class HotkeyRegistrar : IHotkeyRegistrar
         _source.RemoveHook(WndProc);
         _source.Dispose();
     }
+
+    private static int IdOf(WindowCommand command) => (int)command;
 }

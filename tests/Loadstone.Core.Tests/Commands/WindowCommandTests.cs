@@ -96,4 +96,30 @@ public class WindowCommandTests
         WindowCommand.NextDisplay.Title().ShouldBe("Next Display");
         WindowCommand.PreviousDisplay.Title().ShouldBe("Previous Display");
     }
+
+    [Fact]
+    public void Title_AnswersForEveryCommand_WithNoTwoAlike()
+    {
+        // Title() is the one command switch with a discard arm, so a new non-tile member compiles and
+        // only fails when the tray menu is built - by which time the menu is already half drawn.
+        foreach (var command in WindowCommands.All)
+        {
+            command.Title().ShouldNotBeNullOrWhiteSpace(command.Id());
+        }
+
+        WindowCommands.All.Select(c => c.Title()).Distinct().Count().ShouldBe(WindowCommands.All.Count);
+    }
+
+    [Fact]
+    public void EveryCommand_HasAKnownSection_AndAUsableDefaultShortcut()
+    {
+        // A default that is not usable never reaches RegisterHotKey, so the command ships dead: the
+        // menu shows the chord and pressing it does nothing.
+        foreach (var command in WindowCommands.All)
+        {
+            WindowCommands.SectionOrder.ShouldContain(command.Section());
+            WindowCommands.In(command.Section()).ShouldContain(command);
+            command.DefaultShortcut().IsUsable.ShouldBeTrue(command.Id());
+        }
+    }
 }

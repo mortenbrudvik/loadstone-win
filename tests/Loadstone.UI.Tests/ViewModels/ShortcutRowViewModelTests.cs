@@ -18,7 +18,7 @@ public class ShortcutRowViewModelTests
 
     public ShortcutRowViewModelTests()
     {
-        _registrar.Register(Arg.Any<int>(), Arg.Any<Shortcut>()).Returns(HotkeyStatus.Registered);
+        _registrar.Register(Arg.Any<WindowCommand>(), Arg.Any<Shortcut>()).Returns(HotkeyStatus.Registered);
         _probe.CharacterTypedBy(Arg.Any<Shortcut>()).Returns((string?)null);
         _hotkeys = new HotkeyCenter(_registrar, _settings, Substitute.For<ICommandDispatcher>(), _probe, NullLogger<HotkeyCenter>.Instance);
         _hotkeys.Start();
@@ -68,8 +68,8 @@ public class ShortcutRowViewModelTests
     [Fact]
     public void Status_ReportsInUse_Failed_AndLayoutWarnings()
     {
-        _registrar.Register(Arg.Any<int>(), WindowCommand.TopLeft.DefaultShortcut()).Returns(HotkeyStatus.InUse(1409));
-        _registrar.Register(Arg.Any<int>(), WindowCommand.TopRight.DefaultShortcut()).Returns(HotkeyStatus.Failed(87));
+        _registrar.Register(Arg.Any<WindowCommand>(), WindowCommand.TopLeft.DefaultShortcut()).Returns(HotkeyStatus.InUse(1409));
+        _registrar.Register(Arg.Any<WindowCommand>(), WindowCommand.TopRight.DefaultShortcut()).Returns(HotkeyStatus.Failed(87));
         _probe.CharacterTypedBy(WindowCommand.LeftTwoThirds.DefaultShortcut()).Returns("€");
         _hotkeys.ResetAll();
 
@@ -82,7 +82,7 @@ public class ShortcutRowViewModelTests
     public void Status_WhenAnotherRowHoldsTheSameChord_NamesThatRow()
     {
         var shared = WindowCommand.RightHalf.DefaultShortcut();
-        _registrar.Register(Arg.Any<int>(), shared).Returns(HotkeyStatus.InUse(1409));
+        _registrar.Register(Arg.Any<WindowCommand>(), shared).Returns(HotkeyStatus.InUse(1409));
         _hotkeys.SetShortcut(WindowCommand.LeftHalf, shared);
 
         new ShortcutRowViewModel(WindowCommand.LeftHalf, _hotkeys).Status.ShouldBe("Also bound to Right Half");
@@ -99,7 +99,7 @@ public class ShortcutRowViewModelTests
         var vm = new ShortcutsViewModel(_hotkeys);
         var row = vm.Groups.SelectMany(g => g.Rows).First(r => r.Command == WindowCommand.LeftHalf);
         var taken = Shortcut.Parse("Ctrl+Alt+Shift+Left");
-        _registrar.Register(Arg.Any<int>(), taken).Returns(HotkeyStatus.InUse(1409));
+        _registrar.Register(Arg.Any<WindowCommand>(), taken).Returns(HotkeyStatus.InUse(1409));
 
         row.IsRecording = true;
         row.Shortcut = taken;

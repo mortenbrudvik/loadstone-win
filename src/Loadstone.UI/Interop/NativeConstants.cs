@@ -1,4 +1,4 @@
-namespace Loadstone.UI.Interop;
+﻿namespace Loadstone.UI.Interop;
 
 internal static class NativeConstants
 {
@@ -6,10 +6,8 @@ internal static class NativeConstants
     public const long WS_BORDER = 0x00800000;
     public const long WS_CAPTION = 0x00C00000; // WS_BORDER | WS_DLGFRAME
     public const long WS_THICKFRAME = 0x00040000;
-    public const long WS_EX_TOPMOST = 0x00000008;
     public const long WS_EX_TRANSPARENT = 0x00000020;
     public const long WS_EX_TOOLWINDOW = 0x00000080;
-    public const long WS_EX_LAYERED = 0x00080000;
     public const long WS_EX_NOACTIVATE = 0x08000000;
     public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
@@ -20,10 +18,9 @@ internal static class NativeConstants
     // ShowWindow
     public const int SW_RESTORE = 9;
 
-    // SetWindowPos
+    // SetWindowPos. HWND_TOPMOST is a negative pseudo-handle the z-order slot is named by, not a real
+    // window handle and not an error return; SetWindowPos takes it in hWndInsertAfter.
     public static readonly nint HWND_TOPMOST = -1;
-    public const uint SWP_NOSIZE = 0x0001;
-    public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
     public const uint SWP_SHOWWINDOW = 0x0040;
@@ -35,12 +32,21 @@ internal static class NativeConstants
     // Monitors
     public const uint MONITORINFOF_PRIMARY = 1;
     public const int MDT_EFFECTIVE_DPI = 0;
+    // A DPI_AWARENESS_CONTEXT is an opaque handle, and the four predefined contexts are small negative
+    // sentinels rather than allocated handles; -4 is the value, not a failure code.
     public static readonly nint DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4;
+
+    // ASFW_ANY (-1) lets any process take the foreground, not one named pid; the donor is exiting
+    // immediately so it cannot know the running instance's pid without another lookup.
+    public const int ASFW_ANY = -1;
 
     // Hotkeys
     public const uint MOD_NOREPEAT = 0x4000;
     public const int WM_HOTKEY = 0x0312;
     public const int ERROR_HOTKEY_ALREADY_REGISTERED = 1409;
+    // HWND_MESSAGE is a negative pseudo-handle handed to CreateWindowEx as the parent (through
+    // HwndSourceParameters.ParentWindow here) to ask for a message-only window; it names no real
+    // window and is not an error return.
     public static readonly nint HWND_MESSAGE = -3;
 
     // WinEvents

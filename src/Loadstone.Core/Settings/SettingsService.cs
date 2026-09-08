@@ -1,3 +1,4 @@
+using System.Security;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -22,31 +23,42 @@ public sealed class SettingsService : ISettingsService
     private readonly ILogger<SettingsService> _logger;
     private readonly Lock _lock = new();
 
+    /// <summary>The mutable document. Only <see cref="Update"/> hands it out, and only inside the callback.</summary>
+    private readonly AppSettings _current;
+
     public SettingsService(string path, ILogger<SettingsService> logger)
     {
         _path = path;
         _logger = logger;
-        Current = Load();
+        _current = Load();
     }
 
-    public AppSettings Current { get; }
+    public IReadOnlyAppSettings Current => _current;
 
+    /// <summary>
+    /// Raised on the thread that called <see cref="Update"/>: nothing here marshals, and in production
+    /// every write comes from the UI thread. Subscribers are isolated from each other, see
+    /// <see cref="RaiseChanged"/>.
+    /// </summary>
     public event EventHandler? Changed;
 
-    public void Update(Action<AppSettings> change)
+    public bool Update(Action<AppSettings> change)
     {
+        bool saved;
         lock (_lock)
         {
-            change(Current);
-            Save();
+            change(_current);
+            saved = Save();
         }
 
-        Changed?.Invoke(this, EventArgs.Empty);
+        RaiseChanged();
+        return saved;
     }
 
     /// <summary>
     /// Never throws: a settings file that cannot be read or parsed costs the user their customizations,
-    /// not the app. At startup an escaping exception would be a crash before the tray exists.
+    /// not the app. At startup an escaping exception would be a crash before the tray exists, and this
+    /// runs in the constructor, so <see cref="SecurityException"/> from a locked-down profile counts too.
     /// </summary>
     private AppSettings Load()
     {
@@ -61,10 +73,7 @@ public sealed class SettingsService : ISettingsService
 
             // A hand-edited "shortcuts": null deserializes to a null dictionary, which every reader
             // would then dereference.
-            if (loaded.Shortcuts is null)
-            {
-                loaded.Shortcuts = new();
-            }
+            loaded.Shortcuts ??= [];
 
             return loaded;
         }
@@ -76,14 +85,14 @@ public sealed class SettingsService : ISettingsService
             {
                 File.Copy(_path, backup, overwrite: true);
             }
-            catch (Exception copyFailed) when (copyFailed is IOException or UnauthorizedAccessException)
+            catch (Exception copyFailed) when (copyFailed is IOException or UnauthorizedAccessException or SecurityException)
             {
                 _logger.LogError(copyFailed, "settings.json could not be backed up to {Backup}", backup);
             }
 
             return new AppSettings();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
         {
             _logger.LogError(ex, "settings.json could not be read; using defaults for this run");
             return new AppSettings();
@@ -94,18 +103,47 @@ public sealed class SettingsService : ISettingsService
     /// Atomic write: serialize to a temp file, then move it over the target. A failure is logged and
     /// the change stays in memory, so the toggle the user just flipped still applies to this run.
     /// </summary>
-    private void Save()
+    /// <returns>False when the change did not reach disk.</returns>
+    private bool Save()
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             var temp = _path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(Current, JsonOptions));
+            File.WriteAllText(temp, JsonSerializer.Serialize(_current, JsonOptions));
             File.Move(temp, _path, overwrite: true);
+            return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
         {
             _logger.LogError(ex, "settings.json could not be written; keeping the change in memory only");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Isolates subscribers: one that throws is logged and the rest still run. A single bad handler
+    /// used to abort the caller part-way through a sequence it had to finish, leaving the caller's own
+    /// state disagreeing with what had already been written.
+    /// </summary>
+    private void RaiseChanged()
+    {
+        var subscribers = Changed;
+        if (subscribers is null)
+        {
+            return;
+        }
+
+        foreach (var subscriber in subscribers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler)subscriber)(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "a settings Changed subscriber threw; the remaining subscribers still ran");
+            }
         }
     }
 }

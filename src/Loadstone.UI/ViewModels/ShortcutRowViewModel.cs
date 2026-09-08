@@ -71,6 +71,12 @@ internal sealed partial class ShortcutRowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Every <see cref="HotkeyState"/> gets its own arm, with no discard: this caption is the only place
+    /// a hotkey failure is ever shown, so a state added later must fail the build (CS8509, and CS8524 is
+    /// suppressed tree-wide) rather than fall into a silent empty caption — the one outcome that would
+    /// defeat the point of the enum.
+    /// </summary>
     private string StatusText()
     {
         var status = _hotkeys.StatusOf(Command);
@@ -78,7 +84,9 @@ internal sealed partial class ShortcutRowViewModel : ObservableObject
         {
             HotkeyState.InUse => SharesItsChordWith() is { } other ? $"Also bound to {other.Title()}" : "In use by another app",
             HotkeyState.Failed => $"Could not register (error {status.Win32Error})",
-            _ => _hotkeys.LayoutWarning(Command) is { } character ? $"Types {character} on your keyboard layout" : "",
+            HotkeyState.NotReleased => $"Still held by Loadstone; recording it may not work (error {status.Win32Error})",
+            HotkeyState.Registered or HotkeyState.Unbound =>
+                _hotkeys.LayoutWarning(Command) is { } character ? $"Types {character} on your keyboard layout" : "",
         };
     }
 

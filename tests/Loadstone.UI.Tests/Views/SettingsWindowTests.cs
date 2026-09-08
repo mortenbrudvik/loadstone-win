@@ -27,7 +27,7 @@ public class SettingsWindowTests
     public void EveryTab_RendersItsTemplates()
     {
         var registrar = Substitute.For<IHotkeyRegistrar>();
-        registrar.Register(Arg.Any<int>(), Arg.Any<Shortcut>()).Returns(HotkeyStatus.InUse(1409));
+        registrar.Register(Arg.Any<WindowCommand>(), Arg.Any<Shortcut>()).Returns(HotkeyStatus.InUse(1409));
         var probe = Substitute.For<IKeyboardLayoutProbe>();
         probe.CharacterTypedBy(Arg.Any<Shortcut>()).Returns((string?)null);
         var settings = new InMemorySettings();
@@ -54,6 +54,13 @@ public class SettingsWindowTests
                 tabs.SelectedIndex = index;
                 window.UpdateLayout();
             }
+
+            // Recorders only exist while the Shortcuts tab is the realized one, so select it by name
+            // rather than trusting the loop to have left it selected: that held only because Shortcuts
+            // is the last TabItem, and moving a tab would have failed this count for a reason nobody
+            // would find from the message.
+            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(item => Equals(item.Header, "Shortcuts"));
+            window.UpdateLayout();
 
             Descendants<ShortcutRecorder>(window).Count().ShouldBe(WindowCommands.All.Count);
         }

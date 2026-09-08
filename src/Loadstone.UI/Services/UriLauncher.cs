@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using Loadstone.UI.Interop;
 using Microsoft.Extensions.Logging;
 
 namespace Loadstone.UI.Services;
@@ -24,6 +25,18 @@ internal static class UriLauncher
         {
             logger.LogError(ex, "could not open {Uri}", uri);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Opens the URI, or beeps when nothing handled it. A tray-only app has nowhere to show an error, so
+    /// the beep is the whole failure report; every caller wants the same pair, hence one place for it.
+    /// </summary>
+    public static void OpenOrBeep(string uri, ILogger logger)
+    {
+        if (!TryOpen(uri, logger))
+        {
+            Feedback.Beep();
         }
     }
 }

@@ -12,16 +12,16 @@ internal static class TrayMenuBuilder
         {
             foreach (var command in WindowCommands.In(section))
             {
-                entries.Add(new TrayMenuEntry(TrayMenuEntryKind.Command, command.Title(), effectiveShortcut(command)?.DisplayText, command));
+                entries.Add(TrayMenuEntry.ForCommand(command, command.Title(), effectiveShortcut(command)?.DisplayText));
             }
 
-            entries.Add(new TrayMenuEntry(TrayMenuEntryKind.Separator));
+            entries.Add(TrayMenuEntry.Separator);
         }
 
-        entries.Add(new TrayMenuEntry(TrayMenuEntryKind.Settings, "Settings…"));
-        entries.Add(new TrayMenuEntry(TrayMenuEntryKind.Help, "Loadstone Help"));
-        entries.Add(new TrayMenuEntry(TrayMenuEntryKind.Separator));
-        entries.Add(new TrayMenuEntry(TrayMenuEntryKind.Quit, "Quit Loadstone"));
+        entries.Add(TrayMenuEntry.Settings("Settings…"));
+        entries.Add(TrayMenuEntry.Help("Loadstone Help"));
+        entries.Add(TrayMenuEntry.Separator);
+        entries.Add(TrayMenuEntry.Quit("Quit Loadstone"));
         return entries;
     }
 }

@@ -67,9 +67,42 @@ public class ScreenGeometryTests
     }
 
     [Fact]
+    public void Neighbor_MixedDpiDisplays_OrdersByFrameNotScale()
+    {
+        // A 200 percent laptop panel wedged between a 100 percent monitor on the far left and a stacked
+        // pair on the right, one of which is at 150 percent. Reading order is frame x then frame y in
+        // physical pixels; a display's DPI must not enter it, or Next Display walks the desk in a
+        // different order once the user scales one screen.
+        var far = new Display(new Rect(-5000, -200, 1920, 1080), new Rect(-5000, -200, 1920, 1032), 96);
+        var laptop = new Display(new Rect(-3080, -200, 3072, 1920), new Rect(-3080, -200, 3072, 1872), 192);
+        var upper = new Display(new Rect(-8, -1440, 2560, 1440), new Rect(-8, -1440, 2560, 1392), 96);
+        var lower = new Display(new Rect(-8, 0, 2560, 1440), new Rect(-8, 0, 2560, 1392), 144);
+        Display[] displays = [lower, laptop, upper, far];
+
+        ScreenGeometry.Neighbor(far, +1, displays).ShouldBe(laptop);
+        ScreenGeometry.Neighbor(laptop, +1, displays).ShouldBe(upper);
+        ScreenGeometry.Neighbor(upper, +1, displays).ShouldBe(lower);
+        ScreenGeometry.Neighbor(lower, +1, displays).ShouldBe(far);
+        ScreenGeometry.Neighbor(lower, -1, displays).ShouldBe(upper);
+        ScreenGeometry.Neighbor(far, -1, displays).ShouldBe(lower);
+    }
+
+    [Fact]
     public void Scale_IsDpiOver96()
     {
         Primary.Scale.ShouldBe(1.5);
         LeftOf.Scale.ShouldBe(1.0);
+        new Display(new Rect(0, 0, 3840, 2160), new Rect(0, 0, 3840, 2088), 192).Scale.ShouldBe(2.0);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-96)]
+    public void Display_DpiNotPositive_Throws(int dpi)
+    {
+        // A DPI of zero makes Scale zero, which rounds SnapZones' 16 px bands and 140 px corners away to
+        // nothing: the display would have no drag-snap zones at all, with no error anywhere to say why.
+        Should.Throw<ArgumentOutOfRangeException>(
+            () => new Display(new Rect(-1920, 37, 1201, 901), new Rect(-1920, 37, 1201, 901), dpi));
     }
 }

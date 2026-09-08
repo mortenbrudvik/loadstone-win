@@ -19,7 +19,11 @@ internal static class RecorderKeyHandler
     /// <param name="virtualKey">The key pressed.</param>
     public static RecorderAction Handle(KeyModifiers held, int virtualKey)
     {
-        if (VirtualKeys.IsModifier(virtualKey))
+        // IsBindable rather than IsModifier alone: KeyInterop.VirtualKeyFromKey answers 0 for keys WPF
+        // does not map, and with a modifier held a 0 would otherwise fall through to the Commit arm and
+        // throw out of Shortcut's constructor in the middle of a key press. Refusing it here keeps that
+        // constructor validation unreachable from the recorder.
+        if (!VirtualKeys.IsBindable(virtualKey))
         {
             return new RecorderAction(RecorderActionKind.Ignore);
         }

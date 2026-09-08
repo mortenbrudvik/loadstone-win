@@ -42,4 +42,19 @@ public class TrayMenuBuilderTests
         entries.Single(e => e.Command == WindowCommand.Center).Gesture.ShouldBeNull();
         entries.Single(e => e.Command == WindowCommand.TopLeft).Title.ShouldBe("Top Left Corner");
     }
+
+    /// <summary>
+    /// The menu reads <c>Command.Value</c> on a click without checking the kind, so an entry built
+    /// with the wrong pair - a command with no command, or a separator carrying one - throws in the
+    /// user's face instead of failing at the call site. The factories are what hold that invariant;
+    /// this is the assertion that they still do.
+    /// </summary>
+    [Fact]
+    public void Build_GivesEveryCommandEntryACommand_AndNoOtherEntryOne()
+    {
+        var entries = TrayMenuBuilder.Build(c => c.DefaultShortcut());
+
+        entries.Where(e => e.Kind == TrayMenuEntryKind.Command).ShouldAllBe(e => e.Command != null);
+        entries.Where(e => e.Kind != TrayMenuEntryKind.Command).ShouldAllBe(e => e.Command == null);
+    }
 }

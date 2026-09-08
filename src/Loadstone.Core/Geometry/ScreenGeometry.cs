@@ -3,31 +3,16 @@ namespace Loadstone.Core.Geometry;
 public static class ScreenGeometry
 {
     /// <summary>
-    /// The display whose frame contains <paramref name="point"/>. Exact containment wins, so a point
-    /// on the edge shared by two displays goes to the one whose frame includes it. A 1 px tolerance
-    /// then catches a cursor resting exactly on the outer top or right edge, which the exclusive
-    /// rectangle edges would otherwise miss. Null when the point is on no display.
+    /// The display whose frame contains <paramref name="point"/>, first match in list order.
+    /// <see cref="Rect.Contains"/> takes Left and Top but not Right and Bottom, so on the edge two
+    /// abutting displays share, exact containment already picks the display to the right or below and
+    /// nothing is ambiguous. The 1 px inflate is only a second pass for points no frame contains: the
+    /// column at an outer Right edge and the row at an outer Bottom edge, which the exclusive edges
+    /// exclude, plus a cursor that overshot one pixel past an outer Left or Top. Null beyond that.
     /// </summary>
-    public static Display? DisplayContaining(Point point, IReadOnlyList<Display> displays)
-    {
-        foreach (var display in displays)
-        {
-            if (display.Frame.Contains(point))
-            {
-                return display;
-            }
-        }
-
-        foreach (var display in displays)
-        {
-            if (display.Frame.Inflate(1, 1).Contains(point))
-            {
-                return display;
-            }
-        }
-
-        return null;
-    }
+    public static Display? DisplayContaining(Point point, IReadOnlyList<Display> displays) =>
+        displays.FirstOrDefault(d => d.Frame.Contains(point))
+            ?? displays.FirstOrDefault(d => d.Frame.Inflate(1, 1).Contains(point));
 
     /// <summary>The display under the centre of <paramref name="rect"/>; a straddling window belongs to the one holding its centre.</summary>
     public static Display? DisplayContaining(Rect rect, IReadOnlyList<Display> displays) =>

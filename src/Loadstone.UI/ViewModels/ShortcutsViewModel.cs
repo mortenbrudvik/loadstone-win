@@ -5,7 +5,7 @@ using Loadstone.UI.Input;
 
 namespace Loadstone.UI.ViewModels;
 
-internal sealed partial class ShortcutsViewModel : ObservableObject
+internal sealed partial class ShortcutsViewModel : ObservableObject, IDisposable
 {
     private readonly HotkeyCenter _hotkeys;
 
@@ -25,6 +25,14 @@ internal sealed partial class ShortcutsViewModel : ObservableObject
     }
 
     public IReadOnlyList<ShortcutGroupViewModel> Groups { get; }
+
+    /// <summary>
+    /// Both this and the hotkey center live as long as the app, so the subscription above cannot
+    /// outlive its target; the detach is here because the container disposes what it built and every
+    /// other subscription in this layer is symmetric, so an asymmetric one reads as a forgotten line
+    /// rather than a decision.
+    /// </summary>
+    public void Dispose() => _hotkeys.BindingsChanged -= OnBindingsChanged;
 
     [RelayCommand]
     private void RestoreDefaults() => _hotkeys.ResetAll();

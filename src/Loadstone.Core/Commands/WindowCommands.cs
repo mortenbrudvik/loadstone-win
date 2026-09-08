@@ -7,10 +7,16 @@ public static class WindowCommands
     private const KeyModifiers CtrlAlt = KeyModifiers.Control | KeyModifiers.Alt;
     private const KeyModifiers CtrlAltWin = KeyModifiers.Control | KeyModifiers.Alt | KeyModifiers.Win;
 
-    /// <summary>Every command, in menu and settings order.</summary>
-    public static IReadOnlyList<WindowCommand> All { get; } = Enum.GetValues<WindowCommand>();
+    /// <summary>
+    /// Every command, in menu and settings order. Wrapped read-only because Enum.GetValues hands back
+    /// a plain mutable array: exposed bare, a caller could cast it back to WindowCommand[] and reorder
+    /// or overwrite the single source of truth behind the hotkeys, the tray menu, and the Shortcuts
+    /// tab, for every other caller at once.
+    /// </summary>
+    public static IReadOnlyList<WindowCommand> All { get; } = Array.AsReadOnly(Enum.GetValues<WindowCommand>());
 
-    public static IReadOnlyList<CommandSection> SectionOrder { get; } = Enum.GetValues<CommandSection>();
+    /// <summary>The sections in display order. Read-only for the same reason as <see cref="All"/>.</summary>
+    public static IReadOnlyList<CommandSection> SectionOrder { get; } = Array.AsReadOnly(Enum.GetValues<CommandSection>());
 
     public static IReadOnlyList<WindowCommand> In(CommandSection section) =>
         All.Where(c => c.Section() == section).ToList();
@@ -54,6 +60,14 @@ public static class WindowCommands
         WindowCommand.PreviousDisplay => "previousDisplay",
     };
 
+    /// <summary>
+    /// The menu and Shortcuts-tab title. This is the one command switch that is NOT self-enforcing:
+    /// the compiler cannot see that the outer <c>is { } tile</c> already handled every tile command,
+    /// so the inner switch needs a discard arm, and a new non-tile command would compile here and
+    /// throw at run time. It is safe only second-hand: <see cref="Id"/>, <see cref="Section"/>,
+    /// <see cref="ToTile"/> and <see cref="DefaultShortcut"/> have no discard arm and fail the build
+    /// first, so the throw below is unreachable in any build that succeeds.
+    /// </summary>
     public static string Title(this WindowCommand command) => command.ToTile() is { } tile
         ? tile.Title()
         : command switch

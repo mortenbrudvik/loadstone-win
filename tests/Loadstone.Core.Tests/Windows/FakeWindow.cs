@@ -1,4 +1,4 @@
-using Loadstone.Core.Commands;
+﻿using Loadstone.Core.Commands;
 using Loadstone.Core.Geometry;
 using Loadstone.Core.Windows;
 
@@ -17,6 +17,15 @@ public sealed class FakeWindow : IMovableWindow
     public Rect? Frame { get; set; }
     public CommandOutcome NextOutcome { get; set; } = CommandOutcome.Moved;
     public List<Rect> Writes { get; } = [];
+
+    /// <summary>How many times the director read the frame; ReadFrame is a method because it is not free.</summary>
+    public int Reads { get; private set; }
+
+    public Rect? ReadFrame()
+    {
+        Reads++;
+        return Frame;
+    }
 
     public CommandOutcome SetFrame(Rect frame)
     {

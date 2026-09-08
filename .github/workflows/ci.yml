@@ -1,12 +1,19 @@
 name: CI
 
 on:
+  # pull_request is what gives a fork's PR any CI at all: a fork push raises no event here, so
+  # without it nothing outside this repository is ever built. Limiting push to main then keeps a
+  # same-repo PR from building the same commit twice; branches get their run through their PR.
   push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
-# A new push to the same branch cancels the run still going for the old one.
+# A new push to the same branch or pull request cancels the run still going for the old one.
+# github.ref is the merge ref (refs/pull/N/merge) on pull_request and the branch elsewhere, so key
+# on the PR number when there is one to keep one group per PR across its pushes.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:

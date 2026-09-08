@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using Loadstone.Core.Platform;
 using Loadstone.UI.Services;
 using Microsoft.Win32;
@@ -31,7 +31,17 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
             }
         }
 
-        Registry.CurrentUser.DeleteSubKey(Parent, throwOnMissingSubKey: false);
+        try
+        {
+            Registry.CurrentUser.DeleteSubKey(Parent, throwOnMissingSubKey: false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            // Another test - in this class, or in a second run of the suite alongside this one -
+            // created its own key under the parent between the check above and this delete, and
+            // DeleteSubKey refuses a key that has subkeys. Leaving the parent behind is harmless;
+            // failing somebody else's teardown is not.
+        }
     }
 
     [Fact]
@@ -44,7 +54,7 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     public void Enable_WritesTheQuotedExePath_AndStatusIsEnabled()
     {
         var registration = NewRegistration();
-        registration.Enable();
+        registration.Enable().ShouldBeTrue();
 
         using var key = Registry.CurrentUser.OpenSubKey(RunKey);
         key!.GetValue("Loadstone").ShouldBe($"\"{Exe}\"");
@@ -55,10 +65,12 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     public void Disable_RemovesTheValue()
     {
         var registration = NewRegistration();
-        registration.Enable();
-        registration.Disable();
+        registration.Enable().ShouldBeTrue();
+        registration.Disable().ShouldBeTrue();
         registration.Status.ShouldBe(StartupStatus.NotRegistered);
-        Should.NotThrow(registration.Disable);
+
+        // Unregistering something already unregistered is not a failure.
+        registration.Disable().ShouldBeTrue();
     }
 
     [Fact]
@@ -84,9 +96,18 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
             approved.SetValue("Loadstone", new byte[] { 0x03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, RegistryValueKind.Binary);
         }
 
-        registration.Enable();
+        registration.Enable().ShouldBeTrue();
         registration.Status.ShouldBe(StartupStatus.Enabled);
     }
+
+    // The registry-denied path (Status reporting Unknown, and both writes reporting false rather
+    // than throwing) is deliberately NOT tested here. Proving it at this level means putting a Deny
+    // ACE on a key in the developer's own HKCU hive and then taking it off again, and that removal
+    // runs through the very denial it just created: when the restore fails, the run leaves behind a
+    // key its owner can no longer open or delete. A unit suite should not be able to do that to the
+    // machine it runs on. What actually matters - that a tray click survives an unreadable registry
+    // instead of ending the process - is pinned at the consuming seam in SettingsViewModelTests,
+    // which substitutes IStartupRegistration and needs no real ACL.
 
     [Fact]
     public void RefreshPathIfStale_RewritesAPathThatIsNoLongerThere_AndLeavesAnUnregisteredEntryAlone()

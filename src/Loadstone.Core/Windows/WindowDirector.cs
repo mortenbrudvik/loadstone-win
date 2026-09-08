@@ -25,62 +25,52 @@ public sealed class WindowDirector
 
     public int RememberedWindowCount => _originals.Count;
 
-    /// <summary>Runs <paramref name="command"/> on <paramref name="window"/>, using the display under the window's centre.</summary>
+    /// <summary>
+    /// Runs <paramref name="command"/> on <paramref name="window"/>, using the display under the
+    /// window's centre, or the primary when the window is off every display (after a disconnect) so
+    /// it can still be brought back.
+    /// </summary>
     public CommandOutcome Perform(WindowCommand command, IMovableWindow window)
     {
         Prune();
-        if (window.Frame is not { } current)
+        if (window.ReadFrame() is not { } current)
         {
             return CommandOutcome.FrameUnreadable;
         }
 
+        // Restore is the one command that needs no display: it writes back a frame recorded earlier, so
+        // it answers before the lookup and is the reason the lookup is not simply the first thing here.
+        // It no longer asks for the display list at all, which it used to do and throw away.
+        if (command == WindowCommand.Restore)
+        {
+            return Restore(window);
+        }
+
+        // Every remaining command places the window on a display, so there is one lookup and one guard
+        // for all of them, ahead of the branch. NoDisplay still beats every later answer, exactly as it
+        // did when the same guard was written out three times. The two-step lookup is not redundant:
+        // a null from DisplayContaining is the only place the app can tell that the frame sits on no
+        // display at all, and Move needs to know before it treats that frame as a position on one.
         var displays = _displays();
+        var containing = ScreenGeometry.DisplayContaining(current, displays);
+        var standIn = displays.Count > 0 ? displays[0] : null;
+        if ((containing ?? standIn) is not { } display)
+        {
+            return CommandOutcome.NoDisplay;
+        }
+
         if (command.ToTile() is { } tile)
         {
-            if (DisplayFor(current, displays) is not { } display)
-            {
-                return CommandOutcome.NoDisplay;
-            }
-
             return Apply(tile.Frame(display.WorkArea), window, remembering: current);
         }
 
-        switch (command)
+        return command switch
         {
-            case WindowCommand.Center:
-                if (DisplayFor(current, displays) is not { } display)
-                {
-                    return CommandOutcome.NoDisplay;
-                }
-
-                return Apply(Layout.Centered(current, display.WorkArea), window, remembering: current);
-
-            case WindowCommand.Restore:
-                // Restore must not record: it would store the current frame and then "restore" to it.
-                // The entry is dropped only once the window has accepted the old frame, so an app that
-                // refuses the write can still be restored on a later attempt.
-                if (!_originals.TryGetValue(window.Identity, out var original))
-                {
-                    return CommandOutcome.NothingToRestore;
-                }
-
-                var outcome = Apply(original, window, remembering: null);
-                if (outcome.IsMoved)
-                {
-                    _originals.Remove(window.Identity);
-                }
-
-                return outcome;
-
-            case WindowCommand.NextDisplay:
-                return Move(window, current, +1, displays);
-
-            case WindowCommand.PreviousDisplay:
-                return Move(window, current, -1, displays);
-
-            default:
-                throw new ArgumentOutOfRangeException(nameof(command), command, "tile commands are handled above");
-        }
+            WindowCommand.Center => Apply(Layout.Centered(current, display.WorkArea), window, remembering: current),
+            WindowCommand.NextDisplay => Move(window, current, display, +1, displays, lost: containing is null),
+            WindowCommand.PreviousDisplay => Move(window, current, display, -1, displays, lost: containing is null),
+            _ => throw new ArgumentOutOfRangeException(nameof(command), command, "tile commands and Restore are handled above"),
+        };
     }
 
     /// <summary>
@@ -91,7 +81,7 @@ public sealed class WindowDirector
     public CommandOutcome Snap(Tile tile, IMovableWindow window, Display display)
     {
         Prune();
-        if (window.Frame is not { } current)
+        if (window.ReadFrame() is not { } current)
         {
             return CommandOutcome.FrameUnreadable;
         }
@@ -99,10 +89,41 @@ public sealed class WindowDirector
         return Apply(tile.Frame(display.WorkArea), window, remembering: current);
     }
 
-    private CommandOutcome Move(IMovableWindow window, Rect current, int delta, IReadOnlyList<Display> displays)
+    /// <summary>
+    /// Restore must not record: it would store the current frame and then "restore" to it. The entry
+    /// is dropped only once the window has accepted the old frame, so an app that refuses the write
+    /// can still be restored on a later attempt.
+    /// </summary>
+    private CommandOutcome Restore(IMovableWindow window)
     {
-        if (DisplayFor(current, displays) is not { } display
-            || ScreenGeometry.Neighbor(display, delta, displays) is not { } neighbor)
+        if (!_originals.TryGetValue(window.Identity, out var original))
+        {
+            return CommandOutcome.NothingToRestore;
+        }
+
+        var outcome = Apply(original, window, remembering: null);
+        if (outcome.IsMoved)
+        {
+            _originals.Remove(window.Identity);
+        }
+
+        return outcome;
+    }
+
+    /// <summary>
+    /// Moves <paramref name="window"/> to the display <paramref name="delta"/> steps from
+    /// <paramref name="display"/>, keeping its relative place and size there.
+    /// </summary>
+    /// <param name="lost">
+    /// True when the window sits on no display at all and <paramref name="display"/> is only the
+    /// primary standing in. Mapping is meaningless then — the frame's offsets are measured against a
+    /// display the window was never on, so it would land just as invisibly on the neighbour — so such
+    /// a window is centred on the neighbour instead, which is the whole point of pressing Next Display
+    /// on a window lost after a disconnect. Every other window is mapped faithfully, overhang and all.
+    /// </param>
+    private CommandOutcome Move(IMovableWindow window, Rect current, Display display, int delta, IReadOnlyList<Display> displays, bool lost)
+    {
+        if (ScreenGeometry.Neighbor(display, delta, displays) is not { } neighbor)
         {
             return CommandOutcome.NoDisplay;
         }
@@ -112,7 +133,11 @@ public sealed class WindowDirector
             return CommandOutcome.NoOtherDisplay;
         }
 
-        return Apply(Layout.Mapped(current, display.WorkArea, neighbor.WorkArea), window, remembering: current);
+        var frame = lost
+            ? Layout.Centered(current, neighbor.WorkArea)
+            : Layout.Mapped(current, display.WorkArea, neighbor.WorkArea);
+
+        return Apply(frame, window, remembering: current);
     }
 
     /// <summary>
@@ -135,10 +160,6 @@ public sealed class WindowDirector
 
         return CommandOutcome.Moved;
     }
-
-    /// <summary>The display under the window's centre, or the primary display when the window is off every display (after a disconnect) so it can still be brought back.</summary>
-    private static Display? DisplayFor(Rect frame, IReadOnlyList<Display> displays) =>
-        ScreenGeometry.DisplayContaining(frame, displays) ?? (displays.Count > 0 ? displays[0] : null);
 
     private void Prune()
     {

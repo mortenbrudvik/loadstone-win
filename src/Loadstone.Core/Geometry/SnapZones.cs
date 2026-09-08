@@ -15,19 +15,28 @@ public static class SnapZones
     /// deep and extend the same distance outside the frame so an overshoot past an outer edge still
     /// counts. Portrait (height > width): the side bands split along their length into top corner,
     /// side third, bottom corner, and the bottom band gives halves instead of thirds.
-    /// <paramref name="scale"/> is the display's DPI over 96.
     /// </summary>
-    public static Tile? TileAt(Point point, Rect screenFrame, double scale)
+    /// <param name="point">The cursor, in physical pixels.</param>
+    /// <param name="display">
+    /// The display the cursor is on. Taking the whole display rather than a rect and a scale makes
+    /// two mistakes unrepresentable: handing over the work area where the full monitor frame is
+    /// required (the bands would then start below the taskbar), and pairing a frame with the scale of
+    /// a different display on a mixed-DPI desk.
+    /// </param>
+    public static Tile? TileAt(Point point, Display display)
     {
-        var f = screenFrame;
-        var edge = (int)Math.Round(EdgeThickness * scale);
-        var corner = (int)Math.Round(CornerSize * scale);
+        var f = display.Frame;
+        var edge = (int)Math.Round(EdgeThickness * display.Scale);
+        var corner = (int)Math.Round(CornerSize * display.Scale);
 
         if (!f.Inflate(edge, edge).Contains(point))
         {
             return null;
         }
 
+        // Pull an overshooting cursor back onto the frame so the distances below measure from the edge
+        // it overshot. Right and Bottom are exclusive, so the last pixel inside is Right - 1 / Bottom - 1;
+        // the same -1 makes fromRight/fromBottom zero on that last pixel, matching fromLeft/fromTop.
         var x = Math.Clamp(point.X, f.Left, f.Right - 1);
         var y = Math.Clamp(point.Y, f.Top, f.Bottom - 1);
         var fromLeft = x - f.Left;

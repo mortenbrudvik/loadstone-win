@@ -1,11 +1,11 @@
 namespace Loadstone.Core.Platform;
 
-/// <summary>One named Windows edge-snapping flag. The UI implements it over SystemParametersInfo.</summary>
-public interface INativeSnapSettings
+/// <summary>Windows' edge-snapping flags, one at a time. The UI implements it over SystemParametersInfo.</summary>
+public interface INativeSnapFlags
 {
     /// <summary>The flag's current value, or null when it could not be read.</summary>
-    bool? Read(string flag);
+    bool? Read(NativeSnapFlag flag);
 
     /// <summary>Writes the flag so that it persists and Explorer is told. False when the write failed.</summary>
-    bool Write(string flag, bool value);
+    bool Write(NativeSnapFlag flag, bool value);
 }

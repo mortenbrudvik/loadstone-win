@@ -37,8 +37,19 @@ internal partial class SettingsWindow : FluentWindow
         Activate();
     }
 
+    /// <summary>
+    /// Hides instead of closing, because the window is created once and reused. <c>base.OnClosing</c>
+    /// runs first so the public <see cref="Window.Closing"/> event still fires; skipping it made that
+    /// event dead for every subscriber. A subscriber that cancels is honoured rather than hidden.
+    /// </summary>
     protected override void OnClosing(CancelEventArgs e)
     {
+        base.OnClosing(e);
+        if (e.Cancel)
+        {
+            return;
+        }
+
         e.Cancel = true;
         Hide();
     }

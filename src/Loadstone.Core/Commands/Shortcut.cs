@@ -9,6 +9,27 @@ namespace Loadstone.Core.Commands;
 /// </summary>
 public sealed record Shortcut(KeyModifiers Modifiers, int VirtualKey)
 {
+    /// <summary>
+    /// The key the chord ends on. Rejected unless <see cref="VirtualKeys.IsBindable"/>, because
+    /// <see cref="ToString"/> is the settings format and has to be total over everything that can be
+    /// constructed: <c>new Shortcut(mods, 0)</c> would write "Ctrl+Alt+Vk0x00", which
+    /// <see cref="TryParse"/> then refuses, so the command would silently come back unbound on the
+    /// next launch. Throwing at construction turns that into a bug at the source instead.
+    /// </summary>
+    public int VirtualKey { get; init; } = VirtualKeys.IsBindable(VirtualKey)
+        ? VirtualKey
+        : throw new ArgumentOutOfRangeException(nameof(VirtualKey), VirtualKey, "A shortcut's key must be a non-modifier virtual-key code in 1..0xFF.");
+
+    /// <summary>
+    /// Whether this chord may actually be registered. It is the recorder's rule, stated once so the
+    /// settings loader can apply it too: a hand-edited <c>"restore": "Backspace"</c> parses perfectly
+    /// well, and RegisterHotKey would then swallow Backspace system-wide, in every app, with no way
+    /// left to type it. Only F1..F24 may go bare; a modifier-only chord cannot even be constructed
+    /// because the key itself must not be a modifier.
+    /// </summary>
+    public bool IsUsable =>
+        Modifiers != KeyModifiers.None || VirtualKey is >= VirtualKeys.F1 and <= VirtualKeys.F24;
+
     public static bool TryParse(string? text, [NotNullWhen(true)] out Shortcut? shortcut)
     {
         shortcut = null;
@@ -41,7 +62,10 @@ public sealed record Shortcut(KeyModifiers Modifiers, int VirtualKey)
             }
         }
 
-        if (parts[^1].Length == 0 || !VirtualKeys.TryParse(parts[^1], out var vk))
+        // IsBindable is re-checked here rather than left to the constructor: "Ctrl+Vk0x10" names the
+        // Shift key by code and would otherwise throw out of a TryParse, which a settings file full of
+        // hand-edited text must never do.
+        if (parts[^1].Length == 0 || !VirtualKeys.TryParse(parts[^1], out var vk) || !VirtualKeys.IsBindable(vk))
         {
             return false;
         }
