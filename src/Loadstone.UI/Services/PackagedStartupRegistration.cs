@@ -15,6 +15,15 @@ namespace Loadstone.UI.Services;
 /// Settings the state is <see cref="StartupTaskState.DisabledByUser"/> and
 /// <see cref="StartupTask.RequestEnableAsync"/> will not override them, so
 /// <see cref="EnableAsync"/> reports false and the view model tells the user where to change it.
+/// <para>
+/// <see cref="Status"/> reflects the task as of the last <see cref="InitializeAsync"/> call, not a
+/// live cross-process query: <see cref="StartupTask.State"/> is read off the cached object, and an
+/// external change - the user flipping the switch in Task Manager while Loadstone keeps running -
+/// may not be visible until <see cref="InitializeAsync"/> runs again, which it is safe to do, since
+/// it only re-fetches and reassigns the cached task. The unpackaged registry path has no such gap
+/// because it re-reads the registry on every <see cref="Status"/> get; closing it here would mean
+/// making <see cref="Status"/> asynchronous, which every caller depends on it not being.
+/// </para>
 /// </remarks>
 internal sealed class PackagedStartupRegistration : IStartupRegistration
 {
@@ -33,7 +42,29 @@ internal sealed class PackagedStartupRegistration : IStartupRegistration
     /// already hold, so the only asynchronous work is the one-time fetch in
     /// <see cref="InitializeAsync"/>; the Settings constructor and the tray must never await.
     /// </summary>
-    public StartupStatus Status => _task is null ? StartupStatus.Unknown : Map(_task.State);
+    public StartupStatus Status
+    {
+        get
+        {
+            if (_task is null)
+            {
+                return StartupStatus.Unknown;
+            }
+
+            try
+            {
+                return Map(_task.State);
+            }
+            catch (Exception ex)
+            {
+                // _task.State is a proxy call into an out-of-process broker and can throw (e.g. if
+                // the broker has gone since InitializeAsync succeeded). This must never throw: it is
+                // read from the Settings constructor and on every tray click with no handler above it.
+                _logger.LogError(ex, "could not read the startup task state");
+                return StartupStatus.Unknown;
+            }
+        }
+    }
 
     public async Task InitializeAsync()
     {
@@ -45,6 +76,11 @@ internal sealed class PackagedStartupRegistration : IStartupRegistration
         {
             // Nothing here may throw: this runs on the dispatcher during startup with no handler over
             // it, and the app must still tile windows when its login item cannot be read.
+            //
+            // Unlike RegistryStartupRegistration, this class catches Exception broadly rather than
+            // filtering to a known set: the WinRT/COM exception surface behind StartupTask is
+            // open-ended (broker RPC failures surface as any HRESULT), and every method here has the
+            // same never-throw obligation, so a narrower filter would just be a second way to escape.
             _logger.LogError(ex, "could not read the startup task {TaskId}", TaskId);
         }
     }
