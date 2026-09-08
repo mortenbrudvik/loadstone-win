@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  # pull_request is what gives a fork's PR any CI at all: a fork push raises no event here, so
+  # without it nothing outside this repository is ever built. Limiting push to main then keeps a
+  # same-repo PR from building the same commit twice; branches get their run through their PR.
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch or pull request cancels the run still going for the old one.
+# github.ref is the merge ref (refs/pull/N/merge) on pull_request and the branch elsewhere, so key
+# on the PR number when there is one to keep one group per PR across its pushes.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Loadstone.slnx
+
+      - name: Build
+        run: dotnet build Loadstone.slnx -c Release --no-restore
+
+      # Real-window tests run here too: the hosted Windows runner has an interactive desktop.
+      # .NET 10 SDK's "dotnet test" runs Microsoft.Testing.Platform projects (xunit.v3) natively,
+      # opted into via global.json; that mode takes the solution via --solution rather than as a
+      # positional argument, and TRX output via --report-trx (Microsoft.Testing.Extensions.TrxReport)
+      # rather than the VSTest-only --logger. See https://aka.ms/dotnet-test-mtp-error.
+      - name: Test
+        run: dotnet test --solution Loadstone.slnx -c Release --no-build --report-trx --results-directory TestResults
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+          retention-days: 14

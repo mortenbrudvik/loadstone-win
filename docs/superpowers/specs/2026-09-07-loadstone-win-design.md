@@ -4,6 +4,10 @@ Date: 2026-09-07
 Status: approved design, ready for an implementation plan
 Reference implementation: the macOS app at `C:\code\projects\loadstone` (Loadstone 0.2.1, Swift 6)
 
+This is the design as approved before implementation, kept as a record of the reasoning rather than
+rewritten to match the code. Where the shipped code went another way, section 15 says so; the code
+wins on any disagreement.
+
 ## 1. Purpose and scope
 
 Loadstone for Windows is a tray utility that snaps the focused window into halves, corners, thirds, and two-thirds of the screen, from global hotkeys or by dragging a window to a screen edge. It is a port of the macOS Loadstone with the same commands, the same drag zones, the same restore semantics, and the same defaults translated to Windows chords.
@@ -265,12 +269,12 @@ Core owns the interfaces the UI implements, all with obvious fakes for tests: `I
 
 ### 5.2 Win32Window
 
-`Win32Window` implements `IMovableWindow` and is the only type that knows about invisible borders and DPI, the role `AXWindow` plays on the Mac.
+`Win32Window` implements `IMovableWindow` and is the only type that knows about invisible borders, the role `AXWindow` plays on the Mac. DPI is not its business: monitor DPI is read in `Displays.Snapshot` (5.4), carried on `Display`, and applied by `SnapZones`. What `Win32Window` does about DPI is write the frame a second time when it lands off target (step 5 below), without doing any scaling arithmetic itself.
 
 - `Frame` reads `DWMWA_EXTENDED_FRAME_BOUNDS`, the rectangle the user sees. `GetWindowRect` includes the invisible resize borders (about 7 px per side at 100 percent), which is why naive tiling leaves gaps between tiles. Falls back to `GetWindowRect` if the DWM call fails. Null when the handle is no longer a window or both calls fail.
 - `SetFrame(target)`:
   1. If the window is minimized or maximized, `ShowWindow(SW_RESTORE)` first; `SetWindowPos` misbehaves on those states.
-  2. If the window has no `WS_THICKFRAME` style, it is fixed-size: keep its current size and center it inside the target, clamped to the target. Snap does the same.
+  2. If the window has no `WS_THICKFRAME` style, it is fixed-size: keep its current size and center it on the target. A window larger than the tile overhangs it rather than being resized, because `SetWindowPos` would resize a window that has no sizing frame and break its layout.
   3. Compute the border insets as the difference between `GetWindowRect` and the extended frame bounds, and expand the target by them so the visible frame lands on the target.
   4. `SetWindowPos(hwnd, 0, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE)`. A false return is `Rejected` with `GetLastError`. The common case is a window of an elevated process, which UIPI blocks with access denied.
   5. Read the frame back. If it differs from the target, write once more with the same expanded rectangle. This is the DPI dance: moving a per-monitor-aware window to a monitor with a different scale makes it resize itself on `WM_DPICHANGED`, and the second write lands once it lives there. It is the Windows form of the Mac's size, position, size sequence.
@@ -352,9 +356,9 @@ The README's troubleshooting entry tells users where to put the setting back by 
 
 ### 7.2 Launch at login
 
-`RegistryStartupRegistration` writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Loadstone`, data the quoted path of the running exe. `Disable` deletes the value. `Status` reads `…\Explorer\StartupApproved\Run`, value `Loadstone`: absent or first byte 0x02 means enabled, 0x03 means Task Manager disabled it. That status surfaces in Settings as "Disabled in Task Manager › Startup apps" with a button that opens `ms-settings:startupapps`, the counterpart of the Mac's approval message.
+`RegistryStartupRegistration` writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Loadstone`, data the quoted path of the running exe. `Disable` deletes the value. `Status` reads `…\Explorer\StartupApproved\Run`, value `Loadstone`: absent or first byte 0x02 means enabled, 0x03 means Task Manager disabled it. That status surfaces in Settings as "Disabled in Task Manager › Startup apps" with a button that opens `ms-settings:startupapps`, the counterpart of the Mac's approval message. `Enable` deletes that `StartupApproved\Run` value as well as writing the Run value: it is the one write outside the Run key, and without it Task Manager's disable would outlive re-enabling from Settings.
 
-At launch, if the Run value exists and points somewhere other than the running exe (an installer moved it), it is rewritten. A failed write rolls the toggle back and shows the error, with the same re-entrancy guard the Mac's `isApplyingLoginItem` needed.
+At launch, if the Run value exists and the path it holds is no longer on disk (an installer moved the exe), it is rewritten to the running exe. A registered path that still exists is left alone even when it is a different copy: repointing the entry at whichever build happens to launch would hand the user's login item to a build output directory. A failed write rolls the toggle back and shows the error, with the same re-entrancy guard the Mac's `isApplyingLoginItem` needed.
 
 ## 8. UI
 
@@ -470,7 +474,7 @@ A later phase, implemented through the wpf-installer skill after the app works e
 ## 13. Documentation
 
 - `README.md` follows the Mac README's structure: what it is, features, default shortcuts (Windows chords), drag-to-snap zones, install (download the installer, run it), build from source (`dotnet build`, `dotnet test`), troubleshooting, how it works, name, license. Troubleshooting covers: a window that will not move (elevated process, fixed-size, app refused), a shortcut that is ignored (in use by another app, AltGr character on your layout), dragging that does not snap (title bar, shared edges), Restore does nothing (one-shot), edge snapping left off after a crash and where to put it back, reading the log.
-- `docs/snap-zones.svg` is copied from the Mac repo unchanged (it is platform neutral). `docs/layouts.svg` is regenerated with Windows chords.
+- Both diagrams are the Mac's with Windows labels rather than copies: `docs/snap-zones.svg` keeps the Mac's geometry and legend but reads "16 px … at 100% scaling" where the Mac reads points, and `docs/layouts.svg` is regenerated with the Windows chords.
 - `CLAUDE.md` from the wpf-scaffold template, plus an architecture section carrying the invariants over from the Mac: command ids never change, the floor rule and why fixtures are odd, place twice for DPI, the visible frame versus the outer rectangle, the native-snap marker and why recovery runs before capture, the ledger written after acceptance, the drag tracker's rules, and the spike's outcome.
 - `LICENSE`: MIT, © 2026 Morten Brudvik.
 
@@ -484,3 +488,24 @@ A later phase, implemented through the wpf-installer skill after the app works e
 | An STA fact attribute for xUnit v3 is unavailable | Small STA thread helper in the UI test project |
 | GitHub's Windows runner cannot create windows | Environment check skips the real-window tests there, mirroring the Mac's CI skip |
 | Per-monitor DPI edge cases on exotic desks | Place-twice plus tolerance logging; the Snap project's experience says this is enough |
+
+## 15. Drift from the shipped implementation
+
+Recorded 2026-09-08, after the implementation landed. The design above is left as approved; this
+section lists where the code differs, so a reader does not go looking for a name that is not there.
+
+**Seams (4.7).** `IStartupRegistration` is `Status`, `Enable()`, `Disable()`. There is no `IsEnabled` — `Status` carries that — and `Enable()` takes no `exePath`: `RegistryStartupRegistration` fixes the path at construction from `Environment.ProcessPath`. `INativeSnapSettings` is gone by that name — read it as `INativeSnapFlags` wherever the design still says it (the 3.3 file list, 7.1, and 10.1's `NativeSnapTests` line) — and its `Read`/`Write` take a `NativeSnapFlag` enum value, not a flag name, so adding a flag fails the build in the one place that has to learn its `SystemParametersInfo` actions instead of reading null and writing false at run time. `INativeSnapMarker` is a second platform seam alongside it (see the next entry). `IMovableWindow.Frame`, and with it the `Frame` of 5.2, is `ReadFrame()` — a method rather than a property, because the real implementation is two or three Win32 calls and the answer changes between reads. `ISettingsService.Current` hands out `IReadOnlyAppSettings` rather than the mutable document, so `Update` stays the only path that writes, saves and notifies; `Update` returns false when the save did not reach disk.
+
+**The crash marker (4.6, 7.1).** It is no longer the `nativeSnapPreviousValues` key of settings.json. It has its own file, `%LOCALAPPDATA%\Loadstone\native-snap-marker.json`, behind `INativeSnapMarker` / `FileNativeSnapMarker`. Keeping it in the settings document made every marker write raise `ISettingsService.Changed` and re-enter every subscriber, besides putting process-recovery state in a file the user is invited to hand-edit. The old key survives on `AppSettings` for migration only: nothing writes it, and `NativeSnap` reads it once, moves it to the new store, and clears it — the one settings write left on that path, and one of the two reasons `NativeSnap`'s `Changed` handler is still flip-detecting. So 7.1's "if the marker is present in settings" now means the marker store; the sequence it describes — recover, then capture, then park in one write — is unchanged.
+
+**Command dispatch (5.5).** `Run(command, hwnd)` is `Run(command, WindowIdentity)`: the tray captures the owning pid together with the handle, because Windows recycles handles while a menu is open and the pid is the only thing separating the window the user aimed at from a stranger that inherited its handle. For the same reason `Win32Window` has no handle-only constructor: `Win32Window.For(hwnd)` reads the pid and returns null when it cannot, rather than building an identity around a guessed one.
+
+**Keyboard layout probe (6.1).** `KeyboardLayoutProbe.TypesCharacter(shortcut)` is `CharacterTypedBy(Shortcut)` returning `string?`. Settings shows the character it found ("Types € on your keyboard layout"), so the probe returns the character rather than a bool; null means the chord types nothing.
+
+**Interop (5.1).** Three functions are listed there and never declared, because nothing needed them: `GetWindowPlacement`, `MonitorFromPoint`, and `GetDpiForWindow` (monitor DPI comes from `GetDpiForMonitor` alone). Two are declared and not listed: `SetWindowLongPtr`, which `SnapPreview` uses to set the preview window's extended style, and `AllowSetForegroundWindow`, which a second instance calls to hand its foreground rights to the running one before asking it to show Settings.
+
+**Names and file shapes (3.1, 3.4).** The solution file is `Loadstone.slnx`, not `Loadstone.sln`. `Input/SnapPreview.xaml(.cs)` is a code-only `SnapPreview.cs`. `Controls/ShortcutRecorder.cs` is `ShortcutRecorder.xaml` plus `ShortcutRecorder.xaml.cs`.
+
+**Files the layouts omit.** Core (3.3): `Commands/KeyModifiers.cs`, `Commands/WindowCommands.cs` (the extension methods over the enum), `Platform/StartupApproval.cs`, `Platform/NativeSnapFlag.cs`, `Platform/INativeSnapMarker.cs`, `Platform/FileNativeSnapMarker.cs`, `Settings/IReadOnlyAppSettings.cs`. UI (3.4): `Windows/WindowLiveness.cs`, `Interop/Feedback.cs`, `Services/LoggingSetup.cs`, `Services/ShellActions.cs`, `Services/UriLauncher.cs`, `Tray/TrayMenuEntry.cs`, `ViewModels/ShortcutGroupViewModel.cs`, and the test seams `Input/IHotkeyRegistrar.cs`, `Input/IKeyboardLayoutProbe.cs`, `Input/ISnapPreview.cs`, `Input/HotkeyStatus.cs`, `Windows/ICommandDispatcher.cs`. `Tray/IShellActions.cs` was one of them until the review pass that wrote this section deleted it: it had a single implementation and no test ever substituted it. `TrayController` now takes the concrete `Services/ShellActions.cs` directly, and that class still does the job the interface was introduced for — App fills in its delegates after the container is built, so the tray never references App.
+
+**Logging the final frame (5.2, step 6).** The step says the final frame is logged when it differs from the target. `CommandDispatcher.Report` logs it at debug level on every `Moved` outcome, difference or not.

@@ -1,0 +1,25 @@
+<Project>
+  <!-- Shared by every project in the tree. Project-specific settings (UseWPF, OutputType,
+       AssemblyName, version) stay in each .csproj. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <!-- x64, not AnyCPU: GetWindowLongPtrW/SetWindowLongPtrW do not exist in the 32-bit user32, so
+         a 32-bit host would build clean and then die at the first call with
+         EntryPointNotFoundException. Marking the assemblies x64 turns that into a load-time
+         failure instead. This has to sit at the tree level rather than on Loadstone.UI alone: an
+         AnyCPU test project referencing an x64 one warns MSB3270, and this tree builds clean.
+         PlatformTarget sets the assembly's architecture flag only - $(Platform) stays AnyCPU, so
+         no output path moves and the .slnx keeps its single configuration. -->
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- SupportedOSPlatformVersion is deliberately left at its default, which the TFM above pins to
+         10.0.26100 (Windows 11 24H2). That is the CA1416 analysis baseline, not a runtime floor:
+         the manifest declares Windows 10 and nothing here calls an API newer than it. Lowering the
+         baseline would buy no real checking - every OS-version-sensitive call in this app goes
+         through a LibraryImport declaration, which carries no platform attributes for CA1416 to
+         look at - while risking a fresh warning-as-error from the framework call sites it can see. -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
