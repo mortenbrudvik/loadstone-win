@@ -89,7 +89,7 @@ internal sealed class RegistryStartupRegistration : IStartupRegistration
     /// write outside the Run key and it is deliberate: without it a disable from Task Manager's
     /// Startup tab outlives re-enabling from here, so the checkbox would go on and nothing happen.
     /// </summary>
-    public bool Enable()
+    public Task<bool> EnableAsync()
     {
         try
         {
@@ -100,27 +100,27 @@ internal sealed class RegistryStartupRegistration : IStartupRegistration
 
             using var approved = Registry.CurrentUser.OpenSubKey(_approvedKeyPath, writable: true);
             approved?.DeleteValue(ValueName, throwOnMissingValue: false);
-            return true;
+            return Task.FromResult(true);
         }
         catch (Exception ex) when (IsRegistryRefusal(ex))
         {
             _logger.LogError(ex, "could not register launch at login");
-            return false;
+            return Task.FromResult(false);
         }
     }
 
-    public bool Disable()
+    public Task<bool> DisableAsync()
     {
         try
         {
             using var run = Registry.CurrentUser.OpenSubKey(_runKeyPath, writable: true);
             run?.DeleteValue(ValueName, throwOnMissingValue: false);
-            return true;
+            return Task.FromResult(true);
         }
         catch (Exception ex) when (IsRegistryRefusal(ex))
         {
             _logger.LogError(ex, "could not unregister launch at login");
-            return false;
+            return Task.FromResult(false);
         }
     }
 
@@ -132,7 +132,7 @@ internal sealed class RegistryStartupRegistration : IStartupRegistration
     /// Does nothing when not registered, and nothing when the key will not open - this runs during
     /// startup, and a login item pointing at the wrong path is not worth failing to launch over.
     /// </summary>
-    public void RefreshPathIfStale()
+    public Task InitializeAsync()
     {
         try
         {
@@ -146,6 +146,8 @@ internal sealed class RegistryStartupRegistration : IStartupRegistration
         {
             _logger.LogError(ex, "could not refresh the launch-at-login path");
         }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>

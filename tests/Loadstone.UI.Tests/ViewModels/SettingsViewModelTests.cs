@@ -38,10 +38,10 @@ public class SettingsViewModelTests
     public void LaunchAtLogin_On_EnablesRegistration()
     {
         _startup.Status.Returns(StartupStatus.NotRegistered, StartupStatus.Enabled);
-        _startup.Enable().Returns(true);
+        _startup.EnableAsync().Returns(true);
         var vm = NewViewModel();
         vm.LaunchAtLogin = true;
-        _startup.Received(1).Enable();
+        _startup.Received(1).EnableAsync();
         vm.LaunchAtLogin.ShouldBeTrue();
         vm.LaunchAtLoginMessage.ShouldBe("");
     }
@@ -50,10 +50,10 @@ public class SettingsViewModelTests
     public void LaunchAtLogin_Off_DisablesRegistration()
     {
         _startup.Status.Returns(StartupStatus.Enabled, StartupStatus.NotRegistered);
-        _startup.Disable().Returns(true);
+        _startup.DisableAsync().Returns(true);
         var vm = NewViewModel();
         vm.LaunchAtLogin = false;
-        _startup.Received(1).Disable();
+        _startup.Received(1).DisableAsync();
         vm.LaunchAtLogin.ShouldBeFalse();
         vm.LaunchAtLoginMessage.ShouldBe("");
     }
@@ -67,14 +67,14 @@ public class SettingsViewModelTests
     public void LaunchAtLogin_WhenTheRegistryWriteFails_RollsBackAndExplains()
     {
         _startup.Status.Returns(StartupStatus.NotRegistered);
-        _startup.Enable().Returns(false);
+        _startup.EnableAsync().Returns(false);
         var vm = NewViewModel();
 
         vm.LaunchAtLogin = true;
 
         vm.LaunchAtLogin.ShouldBeFalse();
         vm.LaunchAtLoginMessage.ShouldContain("refused");
-        _startup.Received(1).Enable();
+        _startup.Received(1).EnableAsync();
     }
 
     [Fact]

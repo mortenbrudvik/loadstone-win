@@ -51,10 +51,10 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void Enable_WritesTheQuotedExePath_AndStatusIsEnabled()
+    public async Task Enable_WritesTheQuotedExePath_AndStatusIsEnabled()
     {
         var registration = NewRegistration();
-        registration.Enable().ShouldBeTrue();
+        (await registration.EnableAsync()).ShouldBeTrue();
 
         using var key = Registry.CurrentUser.OpenSubKey(RunKey);
         key!.GetValue("Loadstone").ShouldBe($"\"{Exe}\"");
@@ -62,22 +62,22 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void Disable_RemovesTheValue()
+    public async Task Disable_RemovesTheValue()
     {
         var registration = NewRegistration();
-        registration.Enable().ShouldBeTrue();
-        registration.Disable().ShouldBeTrue();
+        (await registration.EnableAsync()).ShouldBeTrue();
+        (await registration.DisableAsync()).ShouldBeTrue();
         registration.Status.ShouldBe(StartupStatus.NotRegistered);
 
         // Unregistering something already unregistered is not a failure.
-        registration.Disable().ShouldBeTrue();
+        (await registration.DisableAsync()).ShouldBeTrue();
     }
 
     [Fact]
-    public void Status_WhenTaskManagerDisabledIt_SaysSo()
+    public async Task Status_WhenTaskManagerDisabledIt_SaysSo()
     {
         var registration = NewRegistration();
-        registration.Enable();
+        await registration.EnableAsync();
         using (var approved = Registry.CurrentUser.CreateSubKey(ApprovedKey))
         {
             approved.SetValue("Loadstone", new byte[] { 0x03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, RegistryValueKind.Binary);
@@ -87,16 +87,16 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void Enable_ClearsTaskManagersDisable()
+    public async Task Enable_ClearsTaskManagersDisable()
     {
         var registration = NewRegistration();
-        registration.Enable();
+        await registration.EnableAsync();
         using (var approved = Registry.CurrentUser.CreateSubKey(ApprovedKey))
         {
             approved.SetValue("Loadstone", new byte[] { 0x03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, RegistryValueKind.Binary);
         }
 
-        registration.Enable().ShouldBeTrue();
+        (await registration.EnableAsync()).ShouldBeTrue();
         registration.Status.ShouldBe(StartupStatus.Enabled);
     }
 
@@ -110,19 +110,19 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     // which substitutes IStartupRegistration and needs no real ACL.
 
     [Fact]
-    public void RefreshPathIfStale_RewritesAPathThatIsNoLongerThere_AndLeavesAnUnregisteredEntryAlone()
+    public async Task RefreshPathIfStale_RewritesAPathThatIsNoLongerThere_AndLeavesAnUnregisteredEntryAlone()
     {
         var gone = Path.Combine(Path.GetTempPath(), "loadstone-tests", Guid.NewGuid().ToString("N"), "Loadstone.exe");
         File.Exists(gone).ShouldBeFalse();
 
-        NewRegistration(gone).Enable();
+        await NewRegistration(gone).EnableAsync();
         var moved = NewRegistration(@"C:\new\Loadstone.exe");
-        moved.RefreshPathIfStale();
+        await moved.InitializeAsync();
         using var key = Registry.CurrentUser.OpenSubKey(RunKey);
         key!.GetValue("Loadstone").ShouldBe("\"C:\\new\\Loadstone.exe\"");
 
-        moved.Disable();
-        moved.RefreshPathIfStale();
+        await moved.DisableAsync();
+        await moved.InitializeAsync();
         moved.Status.ShouldBe(StartupStatus.NotRegistered);
     }
 
@@ -131,14 +131,31 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     /// user's login item at whichever build happens to run, a build output directory included.
     /// </summary>
     [Fact]
-    public void RefreshPathIfStale_LeavesARegisteredPathThatStillExists_Alone()
+    public async Task RefreshPathIfStale_LeavesARegisteredPathThatStillExists_Alone()
     {
         var stillThere = Environment.ProcessPath.ShouldNotBeNull();
-        NewRegistration(stillThere).Enable();
+        await NewRegistration(stillThere).EnableAsync();
 
-        NewRegistration(@"C:\new\Loadstone.exe").RefreshPathIfStale();
+        await NewRegistration(@"C:\new\Loadstone.exe").InitializeAsync();
 
         using var key = Registry.CurrentUser.OpenSubKey(RunKey);
         key!.GetValue("Loadstone").ShouldBe($"\"{stillThere}\"");
+    }
+
+    /// <summary>
+    /// InitializeAsync is what App calls on every launch; it replaced RefreshPathIfStale on the
+    /// interface so that a packaged implementation can do its own asynchronous setup there.
+    /// Symptom if this regresses: an installed copy whose exe moved loses its login item.
+    /// </summary>
+    [Fact]
+    public async Task InitializeAsync_RewritesAPathThatIsNoLongerThere()
+    {
+        var registration = NewRegistration(exe: @"C:\gone\Loadstone.exe");
+        await registration.EnableAsync();
+
+        await NewRegistration().InitializeAsync();
+
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+        key!.GetValue("Loadstone").ShouldBe($"\"{Exe}\"");
     }
 }

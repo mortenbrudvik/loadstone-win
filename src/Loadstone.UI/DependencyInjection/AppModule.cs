@@ -25,7 +25,7 @@ public sealed class AppModule : Module
         builder.Register(c => new FileNativeSnapMarker(FileNativeSnapMarker.DefaultPath, c.Resolve<ILogger<FileNativeSnapMarker>>()))
             .As<INativeSnapMarker>().SingleInstance();
         builder.RegisterType<NativeSnap>().AsSelf().SingleInstance();
-        builder.RegisterType<RegistryStartupRegistration>().As<IStartupRegistration>().AsSelf().SingleInstance();
+        builder.RegisterType<RegistryStartupRegistration>().As<IStartupRegistration>().SingleInstance();
         // Displays.Source and not Displays.Snapshot: the snapshot abandons the whole list when a
         // monitor cannot be read, which turns every hotkey into a beep, and a source bound to no
         // logger would leave the log the user is told to read with nothing in it about why.

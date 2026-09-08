@@ -95,7 +95,9 @@ public partial class App : Application
 
         // Order matters, as on the Mac: native snap off before the first drag can happen, monitors last.
         nativeSnap.Follow();
-        services.GetRequiredService<RegistryStartupRegistration>().RefreshPathIfStale();
+        // Blocking here is temporary. Task 6 queues this onto the dispatcher, once an implementation
+        // that actually awaits is registered.
+        services.GetRequiredService<IStartupRegistration>().InitializeAsync().GetAwaiter().GetResult();
         services.GetRequiredService<TrayController>();
         services.GetRequiredService<HotkeyCenter>().Start();
         var drag = services.GetRequiredService<DragSnapMonitor>();

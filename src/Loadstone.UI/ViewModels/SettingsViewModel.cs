@@ -58,7 +58,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// through this same generated setter), so the guard is what stops a refused write from
     /// recursing forever. The guard is set by hand here rather than through
     /// <see cref="WithoutSideEffects"/> because it has to cover the registry call as well as the
-    /// assignments. Nothing catches: <see cref="IStartupRegistration.Enable"/> reports a refusal
+    /// assignments. Nothing catches: <see cref="IStartupRegistration.EnableAsync"/> reports a refusal
     /// instead of throwing, and the rollback is simply re-reading the registry - the only thing that
     /// knows the truth after a write that may have half landed.
     /// </summary>
@@ -72,7 +72,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _applying = true;
         try
         {
-            var written = value ? _startup.Enable() : _startup.Disable();
+            // Blocking on the seam here is temporary; the toggle becomes an AsyncRelayCommand in the
+            // next task, before any implementation that actually awaits is registered.
+            var written = (value ? _startup.EnableAsync() : _startup.DisableAsync()).GetAwaiter().GetResult();
             RefreshStartup();
             if (!written)
             {
