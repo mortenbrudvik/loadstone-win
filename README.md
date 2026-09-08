@@ -75,13 +75,13 @@ The edge zones are 16 px deep at 100% scaling and extend the same distance past 
 
 ## Install
 
-Download `Loadstone-<version>-Setup.exe` from the [latest release](https://github.com/mortenbrudvik/loadstone-win/releases/latest) and run it. It installs for the current user, no administrator rights needed, and adds a Start Menu entry. Windows 10 or 11, x64.
+No release is published yet; the installer is the next step. Once one exists, download `Loadstone-<version>-Setup.exe` from the [latest release](https://github.com/mortenbrudvik/loadstone-win/releases/latest) and run it. It installs for the current user, no administrator rights needed, and adds a Start Menu entry. Windows 10 or 11, x64.
 
 Optional: **Settings → Launch at login**.
 
 ### Build from source
 
-You need the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+You need the [.NET 10 SDK](https://dotnet.microsoft.com/download). Once the repository is published:
 
 ```powershell
 git clone https://github.com/mortenbrudvik/loadstone-win.git
@@ -117,7 +117,6 @@ dotnet build Loadstone.slnx                                   # warnings are err
 dotnet test --solution Loadstone.slnx                         # every test project
 dotnet test --project tests/Loadstone.Core.Tests/Loadstone.Core.Tests.csproj
 dotnet test --project tests/Loadstone.UI.Tests/Loadstone.UI.Tests.csproj --filter-query "/*/*/Win32WindowTests/*"
-dotnet run --project src/Loadstone.UI
 & 'C:\Program Files\PowerShell\7\pwsh.exe' -File tools/icons/generate.ps1   # regenerate the .ico assets
 ```
 
