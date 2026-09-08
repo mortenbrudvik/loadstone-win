@@ -2,9 +2,9 @@
 #   & 'C:\Program Files\PowerShell\7\pwsh.exe' -File tools/icons/generate.ps1
 # The icon is a lodestone: a polished black pebble, broad at the top and narrowing toward one
 # corner, lit from the top left with a soft highlight and a faint reflection along its lower rim.
-# tray-dark.ico  : white pebble silhouette, for the dark taskbar
-# tray-light.ico : near-black pebble silhouette, for the light taskbar
 # loadstone.ico  : the app icon, the shaded pebble on a transparent ground
+# tray-dark.ico  : the same pebble for the dark taskbar, with a stronger edge so it separates from the bar
+# tray-light.ico : the same pebble for the light taskbar, with a lighter touch of that edge
 param([string]$OutDir = (Join-Path $PSScriptRoot '..\..\src\Loadstone.UI\Assets'))
 
 Add-Type -AssemblyName System.Drawing
@@ -65,7 +65,7 @@ function New-PebblePath {
 }
 
 # World transform: unit square to the frame, with the pebble enlarged about its centre so it fills
-# the frame the way Windows app icons do (about 84 percent) or the tray glyph does (about 90 percent).
+# the frame the way Windows app icons do (about 84 percent) or a tray glyph does (about 90 percent).
 function Set-World($g, [int]$size, [float]$fill) {
     $m = New-Object System.Drawing.Drawing2D.Matrix
     $m.Scale($size / 64.0, $size / 64.0)
@@ -76,17 +76,10 @@ function Set-World($g, [int]$size, [float]$fill) {
     $m.Dispose()
 }
 
-function Draw-Silhouette($g, [int]$size, [System.Drawing.Color]$color) {
-    Set-World $g $size 1.2
-    $path = New-PebblePath
-    $brush = New-Object System.Drawing.SolidBrush $color
-    $g.FillPath($brush, $path)
-    $brush.Dispose(); $path.Dispose()
-    $g.ResetTransform()
-}
-
-function Draw-Pebble($g, [int]$size) {
-    Set-World $g $size 1.12
+# $edge is 0 for the app icon. Higher values thicken the highlights and add a grey outline so the
+# stone separates from a dark taskbar at 16 px.
+function Draw-Pebble($g, [int]$size, [float]$fill, [float]$edge) {
+    Set-World $g $size $fill
     $path = New-PebblePath
 
     # Body: near-black at the rim rising to a grey sheen where the light lands.
@@ -111,10 +104,11 @@ function Draw-Pebble($g, [int]$size) {
     $spot.Transform($rot); $rot.Dispose()
     $shine = New-Object System.Drawing.Drawing2D.PathGradientBrush $spot
     $shineBlend = New-Object System.Drawing.Drawing2D.ColorBlend 3
+    $shineAlpha = [int][math]::Min(220, 140 + 40 * $edge)
     $shineBlend.Colors = @(
         [System.Drawing.Color]::FromArgb(0, 255, 255, 255),
         [System.Drawing.Color]::FromArgb(36, 255, 255, 255),
-        [System.Drawing.Color]::FromArgb(140, 255, 255, 255))
+        [System.Drawing.Color]::FromArgb($shineAlpha, 255, 255, 255))
     $shineBlend.Positions = [single[]]@(0.0, 0.45, 1.0)
     $shine.InterpolationColors = $shineBlend
     $g.SetClip($path)
@@ -123,20 +117,27 @@ function Draw-Pebble($g, [int]$size) {
     $shine.Dispose(); $spot.Dispose()
 
     # A crisp highlight along the top edge and a faint reflection along the lower rim.
-    $top = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(82, 255, 255, 255)), 1.4
+    $topWidth = 1.4 + 1.6 * $edge; $rimWidth = 1.2 + 1.8 * $edge
+    $topAlpha = [int][math]::Min(230, 82 + 60 * $edge); $rimAlpha = [int][math]::Min(230, 128 + 50 * $edge)
+    $top = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb($topAlpha, 255, 255, 255)), $topWidth
     $top.StartCap = [System.Drawing.Drawing2D.LineCap]::Round; $top.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
     $topPath = Add-Bezier (New-Object System.Drawing.Drawing2D.GraphicsPath) @(22, 13, 32, 9, 46, 12, 54, 22)
     $g.DrawPath($top, $topPath)
-    $rim = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(128, 154, 162, 170)), 1.2
+    $rim = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb($rimAlpha, 154, 162, 170)), $rimWidth
     $rim.StartCap = [System.Drawing.Drawing2D.LineCap]::Round; $rim.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
     $rimPath = Add-Bezier (New-Object System.Drawing.Drawing2D.GraphicsPath) @(57, 36, 56, 46, 48, 55, 36, 58)
     $g.DrawPath($rim, $rimPath)
+    if ($edge -gt 0) {
+        $outline = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb([int](70 * $edge), 138, 146, 153)), (1.2 * $edge)
+        $g.DrawPath($outline, $path)
+        $outline.Dispose()
+    }
     $top.Dispose(); $topPath.Dispose(); $rim.Dispose(); $rimPath.Dispose(); $path.Dispose()
     $g.ResetTransform()
 }
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
-Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Silhouette $g $s ([System.Drawing.Color]::White) }
-Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Silhouette $g $s ([System.Drawing.Color]::FromArgb(255, 31, 31, 31)) }
-Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s }
+Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s 1.12 0 }
+Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 1.6 }
+Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 0.5 }
