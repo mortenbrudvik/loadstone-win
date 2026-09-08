@@ -51,7 +51,11 @@
 
             <ui:Card Margin="0,0,0,12">
               <StackPanel>
-                <ui:ToggleSwitch Content="Launch at login" IsChecked="{Binding LaunchAtLogin}" />
+                <ui:ToggleSwitch
+                    Content="Launch at login"
+                    IsChecked="{Binding LaunchAtLogin, Mode=OneWay}"
+                    Command="{Binding SetLaunchAtLoginCommand}"
+                    CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=IsChecked}" />
                 <DockPanel Margin="0,8,0,0">
                   <ui:Button
                       DockPanel.Dock="Right"

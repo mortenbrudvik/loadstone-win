@@ -9,6 +9,7 @@ using Loadstone.UI.Input;
 using Loadstone.UI.Interop;
 using Loadstone.UI.Services;
 using Loadstone.UI.Tray;
+using Loadstone.UI.ViewModels;
 using Loadstone.UI.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -201,7 +202,28 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private void ShowSettings() => _host?.Services.GetRequiredService<SettingsWindow>().ShowAndActivate();
+    /// <summary>
+    /// Queues a re-read of the packaged startup status before showing the window. Resolved from the
+    /// container rather than through the window, because the queued refresh must reach the same
+    /// singleton <see cref="SettingsViewModel"/> instance the window is bound to, not a copy of it -
+    /// see <see cref="SettingsViewModel.RefreshStartupAsync"/> for why the re-read exists at all.
+    /// Queued with the same fire-and-forget idiom as <see cref="InitializeStartupAsync"/>: showing the
+    /// window must stay synchronous, and the queued refresh still lands before the user can touch the
+    /// toggle, since nothing pumps the dispatcher between here and
+    /// <see cref="SettingsWindow.ShowAndActivate"/> returning.
+    /// </summary>
+    private void ShowSettings()
+    {
+        if (_host is not { } host)
+        {
+            return;
+        }
+
+        var services = host.Services;
+        var settings = services.GetRequiredService<SettingsViewModel>();
+        Dispatcher.BeginInvoke(() => _ = settings.RefreshStartupAsync());
+        services.GetRequiredService<SettingsWindow>().ShowAndActivate();
+    }
 
     /// <summary>
     /// Takes the single-instance mutex and returns the event to listen on, or asks the Loadstone

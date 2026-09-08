@@ -54,15 +54,13 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The setter re-enters itself (<see cref="RefreshStartup"/> puts the registry's answer back
-    /// through this same generated setter), so the guard is what stops a refused write from
-    /// recursing forever. The guard is set by hand here rather than through
-    /// <see cref="WithoutSideEffects"/> because it has to cover the registry call as well as the
-    /// assignments. Nothing catches: <see cref="IStartupRegistration.EnableAsync"/> reports a refusal
-    /// instead of throwing, and the rollback is simply re-reading the registry - the only thing that
-    /// knows the truth after a write that may have half landed.
+    /// The toggle's action. A command and not the generated property hook, because the packaged
+    /// implementation awaits a WinRT call: the hook is a void partial method and could only block.
+    /// The rollback is still a re-read — the only thing that knows the truth after a write that may
+    /// have half landed.
     /// </summary>
-    partial void OnLaunchAtLoginChanged(bool value)
+    [RelayCommand]
+    private async Task SetLaunchAtLogin(bool value)
     {
         if (_applying)
         {
@@ -72,13 +70,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _applying = true;
         try
         {
-            // Blocking on the seam here is temporary; the toggle becomes an AsyncRelayCommand in the
-            // next task, before any implementation that actually awaits is registered.
-            var written = (value ? _startup.EnableAsync() : _startup.DisableAsync()).GetAwaiter().GetResult();
+            var written = value ? await _startup.EnableAsync() : await _startup.DisableAsync();
             RefreshStartup();
             if (!written)
             {
-                LaunchAtLoginMessage = "Could not change Launch at login; Windows refused the registry write.";
+                LaunchAtLoginMessage = "Could not change Launch at login; Windows refused.";
             }
         }
         finally
@@ -99,23 +95,42 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public void RefreshStartup()
     {
         var status = _startup.Status;
-        WithoutSideEffects(() => LaunchAtLogin = status is StartupStatus.Enabled or StartupStatus.DisabledInTaskManager);
+        WithoutSideEffects(() => LaunchAtLogin = status is StartupStatus.Enabled
+            or StartupStatus.DisabledInTaskManager or StartupStatus.EnabledByPolicy);
 
         ShowOpenStartupApps = status == StartupStatus.DisabledInTaskManager;
         LaunchAtLoginMessage = status switch
         {
             StartupStatus.DisabledInTaskManager => "Disabled in Task Manager › Startup apps.",
-            StartupStatus.Unknown => "Could not read Launch at login; Windows refused the registry.",
-            _ => "",
+            StartupStatus.DisabledByPolicy => "Disabled by your organization's policy.",
+            StartupStatus.EnabledByPolicy => "Enabled by your organization's policy.",
+            StartupStatus.Unknown => "Could not read Launch at login.",
+            StartupStatus.NotRegistered => "",
+            StartupStatus.Enabled => "",
         };
+    }
+
+    /// <summary>
+    /// Re-reads the platform before showing it. <see cref="IStartupRegistration.Status"/> on the
+    /// packaged implementation is a snapshot taken once during <see cref="IStartupRegistration.InitializeAsync"/>,
+    /// not a live query, so a user who disables Loadstone in Task Manager while it keeps running would
+    /// otherwise still see the toggle switched on the next time they open Settings.
+    /// <see cref="IStartupRegistration.InitializeAsync"/> is safely re-callable for exactly this: the
+    /// packaged implementation re-fetches the startup task and reassigns its cached copy, and the
+    /// registry implementation just re-runs its stale-path check.
+    /// </summary>
+    public async Task RefreshStartupAsync()
+    {
+        await _startup.InitializeAsync();
+        RefreshStartup();
     }
 
     /// <summary>
     /// Runs <paramref name="assign"/> with the property setters' side effects off, so showing state
     /// that was just read does not write it straight back. Saves and restores the flag rather than
     /// clearing it, because it nests: <see cref="RefreshStartup"/> also runs from inside
-    /// <see cref="OnLaunchAtLoginChanged"/>, which set the flag first and still needs it set when
-    /// this returns.
+    /// <see cref="SetLaunchAtLogin"/>, which set the flag first and still needs it set when this
+    /// returns.
     /// </summary>
     private void WithoutSideEffects(Action assign)
     {
