@@ -170,6 +170,116 @@ public class NativeSnapTests
     }
 
     [Fact]
+    public void Follow_AppliesTheSettingStraightAway()
+    {
+        var snap = NewNativeSnap();
+        snap.Follow();
+
+        _native.Values["DockMoving"].ShouldBeFalse();
+        _native.Values["SnapSizing"].ShouldBeFalse();
+        snap.IsSuppressing.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Follow_WithDragSnappingOff_LeavesWindowsEdgeSnappingAlone()
+    {
+        _settings.Current.DragSnappingEnabled = false;
+        var snap = NewNativeSnap();
+        snap.Follow();
+
+        _native.Writes.ShouldBeEmpty();
+        _native.Values["DockMoving"].ShouldBeTrue();
+        _settings.Current.NativeSnapPreviousValues.ShouldBeNull();
+        snap.IsSuppressing.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Follow_Restore_DoesNotReSuppress_WhenItsOwnMarkerWriteRaisesChanged()
+    {
+        // The regression. Restore clears the marker through the same settings service, and every
+        // write raises Changed. A follower that re-applied on any change captured the values
+        // Restore had just put back and turned both flags off again, so the user lost Windows'
+        // edge snapping on every quit and after every crash.
+        var snap = NewNativeSnap();
+        snap.Follow();
+
+        snap.Restore();
+
+        _native.Values["DockMoving"].ShouldBeTrue();
+        _native.Values["SnapSizing"].ShouldBeTrue();
+        _settings.Current.NativeSnapPreviousValues.ShouldBeNull();
+        snap.IsSuppressing.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Follow_AppliesAgain_WhenTheSettingActuallyFlips()
+    {
+        var snap = NewNativeSnap();
+        snap.Follow();
+        snap.IsSuppressing.ShouldBeTrue();
+
+        _settings.Update(s => s.DragSnappingEnabled = false);
+
+        _native.Values["DockMoving"].ShouldBeTrue();
+        _native.Values["SnapSizing"].ShouldBeTrue();
+        _settings.Current.NativeSnapPreviousValues.ShouldBeNull();
+        snap.IsSuppressing.ShouldBeFalse();
+
+        _settings.Update(s => s.DragSnappingEnabled = true);
+
+        _native.Values["DockMoving"].ShouldBeFalse();
+        _native.Values["SnapSizing"].ShouldBeFalse();
+        snap.IsSuppressing.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Follow_IgnoresSettingsChanges_ThatAreNotTheDragSnappingToggle()
+    {
+        var snap = NewNativeSnap();
+        snap.Follow();
+        var writes = _native.Writes.Count;
+
+        _settings.Update(s => s.Shortcuts["leftHalf"] = "Ctrl+Alt+Shift+Left");
+
+        _native.Writes.Count.ShouldBe(writes);
+        _settings.Current.NativeSnapPreviousValues.ShouldBe(new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = true });
+        snap.IsSuppressing.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Follow_Twice_AppliesAndSubscribesOnlyOnce()
+    {
+        var snap = NewNativeSnap();
+        snap.Follow();
+        var writes = _native.Writes.Count;
+        var updates = _settings.UpdateCount;
+
+        snap.Follow();
+
+        _native.Writes.Count.ShouldBe(writes);
+        _settings.UpdateCount.ShouldBe(updates);
+    }
+
+    [Fact]
+    public void StopFollowing_LeavesTheSettingUnwatched()
+    {
+        var snap = NewNativeSnap();
+        snap.Follow();
+        snap.StopFollowing();
+
+        _settings.Update(s => s.DragSnappingEnabled = false);
+
+        _native.Values["DockMoving"].ShouldBeFalse();
+        snap.IsSuppressing.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void StopFollowing_WithoutFollowing_DoesNothing()
+    {
+        Should.NotThrow(() => NewNativeSnap().StopFollowing());
+    }
+
+    [Fact]
     public void ManagedFlags_AreDockMovingAndSnapSizing()
     {
         NativeSnap.ManagedFlags.ShouldBe(["DockMoving", "SnapSizing"]);

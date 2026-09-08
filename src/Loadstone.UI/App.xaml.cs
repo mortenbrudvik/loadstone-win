@@ -19,6 +19,13 @@ namespace Loadstone.UI;
 
 public partial class App : Application
 {
+    /// <summary>
+    /// How long to wait for the async file target to drain. The fatal handlers need it because an
+    /// unhandled exception kills the process without running NLog's own shutdown flush, so the one
+    /// line that explains the crash would sit in the buffer and be lost.
+    /// </summary>
+    private static readonly TimeSpan LogFlushTimeout = TimeSpan.FromSeconds(2);
+
     private IHost? _host;
     private Mutex? _mutex;
     private IDisposable? _showSettingsListener;
@@ -60,22 +67,7 @@ public partial class App : Application
         shell.QuitAction = Shutdown;
 
         // Order matters, as on the Mac: native snap off before the first drag can happen, monitors last.
-        var dragSnapping = settings.Current.DragSnappingEnabled;
-        nativeSnap.Apply(dragSnapping);
-
-        // Follow the toggle only when it actually flips. Every NativeSnap call parks or clears its
-        // marker in settings, which raises Changed; reacting to that would re-enter Apply and
-        // re-suppress the flags Restore had just put back, on exit and while crashing alike.
-        settings.Changed += (_, _) =>
-        {
-            if (settings.Current.DragSnappingEnabled == dragSnapping)
-            {
-                return;
-            }
-
-            dragSnapping = settings.Current.DragSnappingEnabled;
-            nativeSnap.Apply(dragSnapping);
-        };
+        nativeSnap.Follow();
         services.GetRequiredService<RegistryStartupRegistration>().RefreshPathIfStale();
         services.GetRequiredService<TrayController>();
         services.GetRequiredService<HotkeyCenter>().Start();
@@ -97,13 +89,27 @@ public partial class App : Application
         if (_host is not null)
         {
             var services = _host.Services;
-            services.GetRequiredService<DragSnapMonitor>().Stop();
-            services.GetRequiredService<HotkeyCenter>().Dispose();
-            services.GetRequiredService<IHotkeyRegistrar>().Dispose();
-            services.GetRequiredService<NativeSnap>().Restore();
-            services.GetRequiredService<TrayController>().Dispose();
-            _showSettingsListener?.Dispose();
-            _logger?.LogInformation("exiting");
+            var nativeSnap = services.GetRequiredService<NativeSnap>();
+            nativeSnap.StopFollowing();
+
+            // Section 7 promises the user's edge snapping back after a quit, so nothing above
+            // Restore may cost them that: each teardown step is best-effort and Restore is the
+            // one call the finally guarantees.
+            try
+            {
+                BestEffort("stop the drag monitor", () => services.GetRequiredService<DragSnapMonitor>().Stop());
+                BestEffort("release the hotkeys", () => services.GetRequiredService<HotkeyCenter>().Dispose());
+                BestEffort("close the hotkey window", () => services.GetRequiredService<IHotkeyRegistrar>().Dispose());
+                BestEffort("remove the tray icon", () => services.GetRequiredService<TrayController>().Dispose());
+                BestEffort("stop listening for a second launch", () => _showSettingsListener?.Dispose());
+            }
+            finally
+            {
+                BestEffort("restore Windows edge snapping", nativeSnap.Restore);
+                _logger?.LogInformation("exiting");
+                NLog.LogManager.Flush(LogFlushTimeout);
+            }
+
             _host.StopAsync().GetAwaiter().GetResult();
             _host.Dispose();
         }
@@ -116,6 +122,19 @@ public partial class App : Application
 
     private void ShowSettings() => _host?.Services.GetRequiredService<SettingsWindow>().ShowAndActivate();
 
+    /// <summary>Runs one teardown step; a failure is logged and the rest of the exit carries on.</summary>
+    private void BestEffort(string what, Action step)
+    {
+        try
+        {
+            step();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "could not {Step} while exiting", what);
+        }
+    }
+
     /// <summary>Log as fatal, give Windows its edge snapping back on a best-effort basis, and let the process end.</summary>
     private void InstallExceptionHandlers()
     {
@@ -123,12 +142,14 @@ public partial class App : Application
         {
             _logger?.LogCritical(args.Exception, "unhandled exception on the UI thread");
             RestoreNativeSnapQuietly();
+            NLog.LogManager.Flush(LogFlushTimeout);
             args.Handled = false;
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
             _logger?.LogCritical(args.ExceptionObject as Exception, "unhandled exception");
             RestoreNativeSnapQuietly();
+            NLog.LogManager.Flush(LogFlushTimeout);
         };
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {

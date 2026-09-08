@@ -24,6 +24,10 @@ public sealed class NativeSnap
     /// <summary>The user's values before Loadstone touched them; null while not suppressing.</summary>
     private Dictionary<string, bool>? _captured;
 
+    /// <summary>Whether <see cref="Follow"/> is subscribed, and the setting value it last acted on.</summary>
+    private bool _following;
+    private bool _dragSnapping;
+
     public NativeSnap(INativeSnapSettings native, ISettingsService settings, ILogger<NativeSnap> logger)
     {
         _native = native;
@@ -32,6 +36,41 @@ public sealed class NativeSnap
     }
 
     public bool IsSuppressing => _captured is not null;
+
+    /// <summary>
+    /// Applies the drag-snapping setting now and follows it from then on. Safe to call more than once.
+    /// </summary>
+    /// <remarks>
+    /// The follow re-applies only when the setting actually flips. Suppress and Restore both write
+    /// this class's own marker through the same settings service, and every write raises
+    /// <see cref="ISettingsService.Changed"/>; reacting to those would re-enter <see cref="Apply"/>
+    /// and re-suppress the flags <see cref="Restore"/> had just put back, on exit and while
+    /// crashing alike.
+    /// </remarks>
+    public void Follow()
+    {
+        if (_following)
+        {
+            return;
+        }
+
+        _following = true;
+        _dragSnapping = _settings.Current.DragSnappingEnabled;
+        Apply(_dragSnapping);
+        _settings.Changed += OnSettingsChanged;
+    }
+
+    /// <summary>Stops following the setting. Safe to call when not following.</summary>
+    public void StopFollowing()
+    {
+        if (!_following)
+        {
+            return;
+        }
+
+        _following = false;
+        _settings.Changed -= OnSettingsChanged;
+    }
 
     /// <summary>Suppresses Windows' edge snapping while Loadstone's drag snapping is on, restores it while off.</summary>
     public void Apply(bool dragSnappingEnabled)
@@ -64,6 +103,20 @@ public sealed class NativeSnap
 
         _captured = null;
         _settings.Update(s => s.NativeSnapPreviousValues = null);
+    }
+
+    private void OnSettingsChanged(object? sender, EventArgs e)
+    {
+        var wanted = _settings.Current.DragSnappingEnabled;
+        if (wanted == _dragSnapping)
+        {
+            return;
+        }
+
+        // Assign before applying, never after: Apply writes the marker, which raises Changed again,
+        // and that re-entrant call has to see the new value or the flags flip straight back.
+        _dragSnapping = wanted;
+        Apply(wanted);
     }
 
     private void Suppress()
