@@ -134,8 +134,14 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// The deferred half of startup. Nothing in here throws: both <see cref="IStartupRegistration"/>
-    /// implementations report failure rather than raising, which is what lets this be fire-and-forget.
+    /// The deferred half of startup. Not everything below is guaranteed not to throw:
+    /// <see cref="PackagedStartupRegistration.InitializeAsync"/> catches broadly by design, but
+    /// <see cref="RegistryStartupRegistration.InitializeAsync"/> only catches registry refusals and
+    /// lets a genuine bug through. What actually makes this safe to fire-and-forget is
+    /// <see cref="TaskScheduler.UnobservedTaskException"/>, wired up in
+    /// <see cref="InstallExceptionHandlers"/>: an exception here is captured on the discarded task
+    /// rather than thrown synchronously, and is only observed - logged, not crashed on - once that
+    /// task is finalized.
     /// </summary>
     private async Task InitializeStartupAsync(IServiceProvider services, ISettingsService settings)
     {

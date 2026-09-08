@@ -29,7 +29,7 @@ Loadstone sits in the tray and stays out of the way. When you need two documents
 - **Custom shortcuts** — Magnet-style defaults, all editable, with a warning when a chord is taken by another app or types a character on your keyboard layout
 - **Launch at login** — optional, from Settings
 
-Loadstone turns off Windows' own drag-to-edge snapping while its drag snapping is on, so the two don't fight, and turns it back on when it quits or when you switch drag snapping off. If Loadstone is killed before it can put the setting back, the next launch notices and restores it. The two flags it changes are the drag-to-edge ones, so Win+Arrow and Snap Layouts should be unaffected — but only drag drops were tried when this was measured, so neither is verified.
+Drag snapping is off until you turn it on in Settings, because turning it on is what lets Loadstone switch off Windows' own drag-to-edge snapping while it runs, so the two don't fight; switching drag snapping back off, quitting, or signing out puts Windows' setting back. If Loadstone is killed before it can put the setting back, the next launch notices and restores it. The two flags it changes are the drag-to-edge ones, so Win+Arrow and Snap Layouts should be unaffected — but only drag drops were tried when this was measured, so neither is verified.
 
 ## Default shortcuts
 
@@ -75,7 +75,7 @@ The edge zones are 16 px deep at 100% scaling and extend the same distance past 
 
 ## Install
 
-No release is published yet; the installer is the next step. Once one exists, download `Loadstone-<version>-Setup.exe` from the [latest release](https://github.com/mortenbrudvik/loadstone-win/releases/latest) and run it. It installs for the current user, no administrator rights needed, and adds a Start Menu entry. Windows 10 or 11, x64 — the app manifest declares both, and nothing in the app calls an API newer than Windows 10. The `net10.0-windows10.0.26100.0` target framework looks like a 24H2 floor but is not one: it only sets the baseline the platform-compatibility analyzer checks against. Development and testing have all been on Windows 11, so Windows 10 is declared rather than verified.
+Loadstone is meant to be installed from the Microsoft Store; no listing is live yet. Once it is, the Store installs it for the current user, no administrator rights needed, onto Windows 10 20H2 (build 19041) or later, x64 — the package manifest declares that floor directly (`TargetDeviceFamily MinVersion="10.0.19041.0"`), not the `net10.0-windows10.0.26100.0` target framework, which only sets the baseline the platform-compatibility analyzer checks against and is not itself a version floor. Nothing in the app calls an API newer than Windows 10. Development and testing have all been on Windows 11, so Windows 10 is declared rather than verified.
 
 Optional: **Settings → Launch at login**.
 
@@ -108,7 +108,7 @@ Tray → Loadstone → **Loadstone Help** opens this page at `https://github.com
 
 **Launch at login is on but Loadstone does not start.** Task Manager → Startup apps may have it disabled; Settings shows "Disabled in Task Manager" with a button to open that page.
 
-**Reading the log.** Loadstone writes daily logs to `%LOCALAPPDATA%\Loadstone\Logs`. The startup summary lists the effective binding and status of every shortcut.
+**Reading the log.** Loadstone writes daily logs to `%LOCALAPPDATA%\Loadstone\Logs`, the same path whether run from source or installed from the Store — the package does not redirect file-system writes, only the registry. Settings → General → **Open log folder** opens it directly, which is worth using anyway: it resolves the path for you rather than making you type it. The startup summary lists the effective binding and status of every shortcut.
 
 ## Build and test
 
