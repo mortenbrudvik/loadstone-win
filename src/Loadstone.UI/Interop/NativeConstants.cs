@@ -62,7 +62,6 @@ internal static class NativeConstants
     public const uint SPI_SETSNAPSIZING = 0x008F;
     public const uint SPI_GETDOCKMOVING = 0x0090;
     public const uint SPI_SETDOCKMOVING = 0x0091;
-    public const uint SPIF_UPDATEINIFILE = 0x0001;
     public const uint SPIF_SENDCHANGE = 0x0002;
 
     // Keyboard
