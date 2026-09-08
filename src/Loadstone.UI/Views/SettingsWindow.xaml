@@ -104,7 +104,7 @@
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                               <ui:TextBlock Text="{Binding Title}" />
                               <ui:TextBlock
-                                  Appearance="Caution"
+                                  Foreground="{DynamicResource SystemFillColorCautionBrush}"
                                   FontTypography="Caption"
                                   Text="{Binding Status}"
                                   Visibility="{Binding Status, Converter={StaticResource StringToVisibilityConverter}}" />
