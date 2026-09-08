@@ -16,11 +16,32 @@ $stage = Join-Path $root 'packaging/msix/staging'
 $output = Join-Path $root 'installer-output'
 $package = Join-Path $output "Loadstone-$version-x64.msix"
 
-$tools = Get-ChildItem "$env:USERPROFILE\.nuget\packages\microsoft.windows.sdk.buildtools\*\bin\*\x64" -Directory |
-    Sort-Object FullName | Select-Object -Last 1
-if (-not $tools) { throw 'Microsoft.Windows.SDK.BuildTools is not restored; run dotnet restore first' }
+# The csproj is the one place the BuildTools version is pinned; reading it here instead of
+# hard-coding the number a second time means a future version bump cannot leave the two disagreeing.
+$csprojPath = Join-Path $root 'src/Loadstone.UI/Loadstone.UI.csproj'
+$csprojText = Get-Content $csprojPath -Raw
+if ($csprojText -match 'Microsoft\.Windows\.SDK\.BuildTools"\s+Version="([^"]+)"') {
+    $toolsVersion = $Matches[1]
+} else {
+    throw "no Microsoft.Windows.SDK.BuildTools package reference found in $csprojPath"
+}
+
+# NUGET_PACKAGES overrides the default global-packages folder (common on CI runners); honouring it
+# means this resolves to wherever dotnet restore actually put the tools.
+$nugetPackages = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES.TrimEnd('\') } else { "$env:USERPROFILE\.nuget\packages" }
+$toolsRoot = "$nugetPackages\microsoft.windows.sdk.buildtools\$toolsVersion\bin"
+
+# Resolved to the pinned version specifically - not "whatever else is cached and sorts last".
+# Sort-Object over every cached version is a string sort, so e.g. "10.0.22621.2428" sorts before
+# "10.0.22621.755"; that can silently hand the build a toolset nobody vetted for this package.
+$tools = Get-ChildItem "$toolsRoot\*\x64" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $tools) { throw "Microsoft.Windows.SDK.BuildTools $toolsVersion is not restored under $toolsRoot; run dotnet restore first" }
 
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+# A delete that stops partway (a locked file, a handle left over from a previous run) must not be
+# accepted silently: New-Item -Force is a no-op on a directory that still exists, and every step
+# after it only adds or overwrites, so a stale file would ride along into the package unnoticed.
+if (Test-Path $stage) { throw "could not remove the stale staging directory $stage; check for a locked file" }
 New-Item -ItemType Directory -Force $stage, $output | Out-Null
 
 # Self-contained because there is no MSIX framework package for the .NET desktop runtime.
