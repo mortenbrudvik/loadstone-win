@@ -6,6 +6,7 @@
     <AssemblyName>Loadstone</AssemblyName>
     <RootNamespace>Loadstone.UI</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\loadstone.ico</ApplicationIcon>
     <Version>0.1.0</Version>
     <Product>Loadstone</Product>
     <Company>Morten Brudvik</Company>
@@ -15,6 +16,10 @@
     <!-- LibraryImport's generated marshalling stubs are unsafe code. Only this project declares Win32; Core stays managed-only. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\*.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="WPF-UI" Version="4.3.0" />
