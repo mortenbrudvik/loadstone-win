@@ -65,6 +65,8 @@ if ($LASTEXITCODE -ne 0) { throw "makepri failed with $LASTEXITCODE" }
 & "$($tools.FullName)\makeappx.exe" pack /o /d $stage /p $package
 if ($LASTEXITCODE -ne 0) { throw "makeappx failed with $LASTEXITCODE" }
 
+if (-not (Test-Path $package)) { throw "makeappx reported success but wrote no package at $package" }
+
 if ($SignWith) {
     # SignTool defaults to SHA1, which is rejected; /fd SHA256 is not optional.
     & "$($tools.FullName)\signtool.exe" sign /fd SHA256 /a /f $SignWith $package

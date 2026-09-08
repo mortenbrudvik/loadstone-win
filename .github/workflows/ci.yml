@@ -61,9 +61,12 @@ jobs:
     runs-on: windows-latest
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
-    # Only this job gets write access; the test job above keeps the default read-only token.
+    # No step here pushes, releases, or otherwise writes to the repo - restore, pack, and upload-artifact
+    # all use the runner's artifact service, not the contents API - so this needs no more than the
+    # default read-only token. Pinned explicitly anyway so a future release step has to ask for write
+    # access itself rather than inherit it unnoticed.
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
