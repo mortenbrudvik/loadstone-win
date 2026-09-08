@@ -30,10 +30,13 @@ public sealed class SettingsService : ISettingsService
     {
         _path = path;
         _logger = logger;
+        IsFirstRun = !File.Exists(path);
         _current = Load();
     }
 
     public IReadOnlyAppSettings Current => _current;
+
+    public bool IsFirstRun { get; }
 
     /// <summary>
     /// Raised on the thread that called <see cref="Update"/>: nothing here marshals, and in production

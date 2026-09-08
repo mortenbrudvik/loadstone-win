@@ -130,18 +130,28 @@ public partial class App : Application
         // await here would let a queued second launch build Settings from a half-finished container.
         // Queue it instead. The Settings window is only ever built on a user action, which cannot
         // happen before this lands.
-        Dispatcher.BeginInvoke(() => _ = InitializeStartupAsync(services));
+        Dispatcher.BeginInvoke(() => _ = InitializeStartupAsync(services, settings));
     }
 
     /// <summary>
     /// The deferred half of startup. Nothing in here throws: both <see cref="IStartupRegistration"/>
     /// implementations report failure rather than raising, which is what lets this be fire-and-forget.
     /// </summary>
-    private static async Task InitializeStartupAsync(IServiceProvider services)
+    private async Task InitializeStartupAsync(IServiceProvider services, ISettingsService settings)
     {
         var startup = services.GetRequiredService<IStartupRegistration>();
         await startup.InitializeAsync();
         services.GetRequiredService<ILogger<App>>().LogInformation("launch at login: {Startup}", startup.Status);
+
+        // First run opens Settings so the drag-snapping toggle and its explanation are in front of the
+        // user before anything changes a Windows setting — and so a tray-only app has a window a Store
+        // reviewer can reach from the Start menu. Here rather than in OnStartup, so the launch-at-login
+        // row shows a state that has actually been read. ShowSettings uses Show(), never ShowDialog():
+        // a modal would run a nested dispatcher loop and defeat the ordering OnStartup depends on.
+        if (settings.IsFirstRun)
+        {
+            ShowSettings();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

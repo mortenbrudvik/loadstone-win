@@ -9,6 +9,9 @@ public sealed class InMemorySettings : ISettingsService
 
     IReadOnlyAppSettings ISettingsService.Current => Current;
 
+    /// <summary>What IsFirstRun reports. Default false: most tests are not exercising first run.</summary>
+    public bool IsFirstRun { get; set; }
+
     /// <summary>What Update reports. Set false to stand in for a save that never reached disk.</summary>
     public bool SaveSucceeds { get; set; } = true;
 

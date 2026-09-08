@@ -44,8 +44,8 @@
                     Margin="0,8,0,0"
                     Appearance="Secondary"
                     FontTypography="Caption"
-                    Text="Windows' own edge snapping is off while Loadstone runs."
-                    Visibility="{Binding DragSnappingEnabled, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    TextWrapping="Wrap"
+                    Text="Turning this on switches off Windows' own drag-to-edge snapping while Loadstone runs, so the two do not fight. It comes back when you turn this off, when Loadstone quits, or when you sign out." />
               </StackPanel>
             </ui:Card>
 

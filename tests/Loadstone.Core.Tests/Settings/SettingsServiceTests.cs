@@ -24,10 +24,39 @@ public sealed class SettingsServiceTests : IDisposable
     public void Load_MissingFile_GivesDefaults()
     {
         var service = NewService();
-        service.Current.DragSnappingEnabled.ShouldBeTrue();
+        service.Current.DragSnappingEnabled.ShouldBeFalse();
         service.Current.Shortcuts.ShouldBeEmpty();
         service.Current.NativeSnapPreviousValues.ShouldBeNull();
         File.Exists(SettingsPath).ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// First run is "no file was there to load" and nothing else. A persisted flag would be a second
+    /// source of truth for something the file's own existence already answers, and would have to be
+    /// written before the user had consented to anything.
+    /// </summary>
+    [Fact]
+    public void IsFirstRun_WithNoFileOnDisk_IsTrue()
+    {
+        NewService().IsFirstRun.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsFirstRun_OnceTheFileExists_IsFalse()
+    {
+        NewService().Update(s => s.DragSnappingEnabled = true).ShouldBeTrue();
+
+        NewService().IsFirstRun.ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// Off until asked. Loadstone turns off a Windows setting when this is on, and Store policy
+    /// requires consent before an app changes one — turning this on is that consent.
+    /// </summary>
+    [Fact]
+    public void Load_MissingFile_LeavesDragSnappingOff()
+    {
+        NewService().Current.DragSnappingEnabled.ShouldBeFalse();
     }
 
     [Fact]
@@ -117,7 +146,7 @@ public sealed class SettingsServiceTests : IDisposable
         File.WriteAllText(SettingsPath, "{ this is not json");
 
         var service = NewService();
-        service.Current.DragSnappingEnabled.ShouldBeTrue();
+        service.Current.DragSnappingEnabled.ShouldBeFalse();
         File.ReadAllText(SettingsPath + ".corrupt").ShouldBe("{ this is not json");
 
         service.Update(s => s.DragSnappingEnabled = false);
@@ -139,7 +168,7 @@ public sealed class SettingsServiceTests : IDisposable
 
         var service = NewService();
 
-        service.Current.DragSnappingEnabled.ShouldBeTrue();
+        service.Current.DragSnappingEnabled.ShouldBeFalse();
         service.Current.Shortcuts.ShouldBeEmpty();
     }
 
@@ -179,7 +208,7 @@ public sealed class SettingsServiceTests : IDisposable
 
         var service = NewService();
 
-        service.Current.DragSnappingEnabled.ShouldBeTrue();
+        service.Current.DragSnappingEnabled.ShouldBeFalse();
         service.Current.Shortcuts.ShouldBeEmpty();
     }
 
