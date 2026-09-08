@@ -69,6 +69,13 @@
                       TextWrapping="Wrap"
                       Text="{Binding LaunchAtLoginMessage}" />
                 </DockPanel>
+                <ui:TextBlock
+                    Margin="0,4,0,0"
+                    Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                    FontTypography="Caption"
+                    TextWrapping="Wrap"
+                    Text="{Binding LaunchAtLoginActionMessage}"
+                    Visibility="{Binding LaunchAtLoginActionMessage, Converter={StaticResource StringToVisibilityConverter}}" />
               </StackPanel>
             </ui:Card>
 

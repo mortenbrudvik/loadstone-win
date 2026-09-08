@@ -22,6 +22,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _startup = startup;
         _logger = logger;
         LaunchAtLoginMessage = "";
+        LaunchAtLoginActionMessage = "";
         WithoutSideEffects(() => DragSnappingEnabled = settings.Current.DragSnappingEnabled);
         RefreshStartup();
     }
@@ -32,8 +33,26 @@ internal sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool LaunchAtLogin { get; set; }
 
+    /// <summary>
+    /// What the platform's status means, recomputed from <see cref="StartupStatus"/> on every
+    /// <see cref="RefreshStartup"/>. Deliberately separate from <see cref="LaunchAtLoginActionMessage"/>:
+    /// this slot is owned entirely by <see cref="RefreshStartup"/>, which would otherwise blank out a
+    /// pending write-failure explanation the next time anything - including a second, redundant
+    /// Settings-open trigger while the window is already showing - causes a refresh.
+    /// </summary>
     [ObservableProperty]
     public partial string LaunchAtLoginMessage { get; set; }
+
+    /// <summary>
+    /// Transient feedback about the toggle's own last action, owned entirely by
+    /// <see cref="SetLaunchAtLogin"/>: cleared when an attempt starts, set when the write comes back
+    /// false, and never touched by <see cref="RefreshStartup"/>. Kept apart from
+    /// <see cref="LaunchAtLoginMessage"/> so that a refresh triggered for an unrelated reason - the
+    /// packaged status snapshot being re-read on every Settings open - cannot silently erase the
+    /// explanation for a write that just failed.
+    /// </summary>
+    [ObservableProperty]
+    public partial string LaunchAtLoginActionMessage { get; set; }
 
     [ObservableProperty]
     public partial bool ShowOpenStartupApps { get; set; }
@@ -70,11 +89,14 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _applying = true;
         try
         {
+            // Cleared before the write, not after: a fresh attempt should start without whatever an
+            // earlier one left behind, whether this one goes on to succeed or fail in turn.
+            LaunchAtLoginActionMessage = "";
             var written = value ? await _startup.EnableAsync() : await _startup.DisableAsync();
             RefreshStartup();
             if (!written)
             {
-                LaunchAtLoginMessage = "Could not change Launch at login; Windows refused.";
+                LaunchAtLoginActionMessage = "Could not change Launch at login; Windows refused.";
             }
         }
         finally

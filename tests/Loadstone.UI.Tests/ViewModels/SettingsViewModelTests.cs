@@ -79,7 +79,7 @@ public class SettingsViewModelTests
         await vm.SetLaunchAtLoginCommand.ExecuteAsync(true);
 
         vm.LaunchAtLogin.ShouldBeFalse();
-        vm.LaunchAtLoginMessage.ShouldContain("refused");
+        vm.LaunchAtLoginActionMessage.ShouldContain("refused");
         await _startup.Received(1).EnableAsync();
     }
 
@@ -98,6 +98,7 @@ public class SettingsViewModelTests
 
         vm.LaunchAtLogin.ShouldBeTrue();
         vm.LaunchAtLoginMessage.ShouldBeEmpty();
+        vm.LaunchAtLoginActionMessage.ShouldBeEmpty();
     }
 
     /// <summary>
@@ -114,7 +115,7 @@ public class SettingsViewModelTests
         await vm.SetLaunchAtLoginCommand.ExecuteAsync(true);
 
         vm.LaunchAtLogin.ShouldBeFalse();
-        vm.LaunchAtLoginMessage.ShouldNotBeNullOrWhiteSpace();
+        vm.LaunchAtLoginActionMessage.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Theory]
@@ -134,11 +135,17 @@ public class SettingsViewModelTests
     /// query, so a user who disables Loadstone in Task Manager while it is running would still see
     /// the toggle switched on. Opening Settings is the point that has to re-fetch it; this proves the
     /// re-initialize happens before the status the window shows is read, not just that both happen.
+    /// A sequenced <c>Status.Returns(a, b)</c> would not prove this - it hands out <c>b</c> on the
+    /// second call regardless of whether InitializeAsync was awaited first, so it could pass even if
+    /// RefreshStartup ran first. Instead, InitializeAsync itself is what flips Status to the new
+    /// value: the assertion can only pass if the await actually happened before RefreshStartup read
+    /// Status.
     /// </summary>
     [Fact]
     public async Task RefreshStartupAsync_ReInitializesBeforeReReadingStatus()
     {
-        _startup.Status.Returns(StartupStatus.Enabled, StartupStatus.NotRegistered);
+        _startup.Status.Returns(StartupStatus.Enabled);
+        _startup.When(x => x.InitializeAsync()).Do(_ => _startup.Status.Returns(StartupStatus.NotRegistered));
         var vm = NewViewModel();
         vm.LaunchAtLogin.ShouldBeTrue();
 
@@ -146,6 +153,29 @@ public class SettingsViewModelTests
 
         await _startup.Received(1).InitializeAsync();
         vm.LaunchAtLogin.ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// Reproduces the race that <see cref="SettingsViewModel.LaunchAtLoginActionMessage"/> exists to
+    /// close: <see cref="SettingsViewModel.RefreshStartupAsync"/> runs on every Settings-open trigger,
+    /// including a redundant one while the window is already showing, because nothing checks that.
+    /// Before the split, that queued refresh recomputed the single message property from Status alone
+    /// and blanked the write-failure explanation while nothing about the failure had changed - the
+    /// toggle read correctly but the reason it did not take vanished. Symptom if this regresses: the
+    /// explanation for a refused write disappears the next time Settings is reopened.
+    /// </summary>
+    [Fact]
+    public async Task RefreshStartupAsync_AfterAFailedWrite_DoesNotEraseTheFailureMessage()
+    {
+        _startup.EnableAsync().Returns(false);
+        _startup.Status.Returns(StartupStatus.NotRegistered);
+        var vm = NewViewModel();
+        await vm.SetLaunchAtLoginCommand.ExecuteAsync(true);
+        vm.LaunchAtLoginActionMessage.ShouldNotBeNullOrWhiteSpace();
+
+        await vm.RefreshStartupAsync();
+
+        vm.LaunchAtLoginActionMessage.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]

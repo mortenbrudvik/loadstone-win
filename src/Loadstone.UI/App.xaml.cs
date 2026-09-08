@@ -208,9 +208,14 @@ public partial class App : Application
     /// singleton <see cref="SettingsViewModel"/> instance the window is bound to, not a copy of it -
     /// see <see cref="SettingsViewModel.RefreshStartupAsync"/> for why the re-read exists at all.
     /// Queued with the same fire-and-forget idiom as <see cref="InitializeStartupAsync"/>: showing the
-    /// window must stay synchronous, and the queued refresh still lands before the user can touch the
-    /// toggle, since nothing pumps the dispatcher between here and
-    /// <see cref="SettingsWindow.ShowAndActivate"/> returning.
+    /// window must stay synchronous. On a single open, the queued refresh lands before the user can
+    /// touch the toggle, since nothing pumps the dispatcher between here and
+    /// <see cref="SettingsWindow.ShowAndActivate"/> returning - but nothing here checks whether the
+    /// window is already showing, so a second trigger (a tray click while Settings is already open)
+    /// queues a second refresh on top of whatever the user is doing. That is exactly why
+    /// <see cref="SettingsViewModel.LaunchAtLoginActionMessage"/> is a separate slot from
+    /// <see cref="SettingsViewModel.LaunchAtLoginMessage"/>: a redundant refresh here must not be able
+    /// to erase feedback about a write the user just made.
     /// </summary>
     private void ShowSettings()
     {
