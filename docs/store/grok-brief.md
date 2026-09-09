@@ -3,9 +3,9 @@
 You are working in the Microsoft Partner Center web dashboard on behalf of Morten Brudvik. The app is
 finished and packaged; what remains is the one-time submission work that no API or CLI can do.
 
-**This cannot be completed in one pass.** It splits at a hard handback, because Partner Center
-assigns identity values that must go *into the package* before the package is uploaded. Phase 1 ends
-by reporting those values. Do not attempt Phase 2 until Morten confirms the package has been rebuilt.
+**Phase 1 is complete** — the name is reserved and the package has been rebuilt with the identity
+Partner Center assigned. **Start at Phase 2.** Phase 1 is kept below as a record of what was done and
+why the ordering mattered.
 
 ---
 
@@ -18,7 +18,7 @@ later. It collects and transmits nothing.
 
 ---
 
-## PHASE 1 — Reserve the name and report back
+## PHASE 1 — DONE 2026-09-09, no action needed
 
 ### 1. Reserve
 
@@ -43,16 +43,20 @@ and punctuation included. A single wrong character causes the upload in Phase 2 
 | `Package/Properties/PublisherDisplayName` | usually the publisher display name |
 | **Store ID** | 12 characters, e.g. `9NBLGGH4R315` |
 
-### 3. Stop and report
+### 3. What was reserved
 
-Report all four values plus the Store ID, and anything Partner Center warned about. **Then stop.**
+| Field | Value |
+| --- | --- |
+| `Package/Identity/Name` | `MortenBrudvik.Loadstone` |
+| `Package/Identity/Publisher` | `CN=E6ED6F6D-88CB-42AC-BED3-B0FA24EC28DD` |
+| `Package/Properties/PublisherDisplayName` | `Morten Brudvik` |
+| **Store ID** | `9NJZ0KVVD5N2` |
 
-The package on Morten's machine currently carries placeholder identity values. It cannot be uploaded
-until it is rebuilt with the real ones, and that happens on his machine, not in the browser.
+These are already in the rebuilt package. Nothing to re-enter.
 
 ---
 
-## PHASE 2 — Only after Morten confirms the package is rebuilt
+## PHASE 2 — The work to do now
 
 ### 4. Upload the package
 
@@ -135,7 +139,7 @@ longer than a routine update, because the justification is read by a human.
 
 ## Report back
 
-1. The four identity values, verbatim, plus the Store ID
+1. The submission ID and its status
 2. Every warning or rejection, quoted exactly rather than summarised
 3. What you did not do, and why
 
