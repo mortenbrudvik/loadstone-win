@@ -78,8 +78,7 @@ If the upload is rejected, quote the exact error rather than summarising it.
   processes** (for example Task Manager or an administrator terminal). This is a Windows security
   restriction, not a defect; Microsoft's own PowerToys documents the same limitation.
 - **Screenshots:** the two PNGs Morten provides (1920×1080).
-- **Privacy policy URL:** Morten provides this. **If he has not, stop and ask** — it is mandatory
-  and the submission cannot proceed without it.
+- **Privacy policy URL:** `https://mortenbrudvik.github.io/loadstone-site/privacy/`
 
 ### 6. Age rating
 
@@ -119,7 +118,7 @@ longer than a routine update, because the justification is read by a human.
 ## Stop and ask — do not improvise
 
 - The name `Loadstone` is unavailable
-- No privacy policy URL has been provided
+- The privacy policy URL above does not load
 - Partner Center rejects the package, for any reason
 - Any IARC question whose honest answer is unclear
 - Anything asking for payment details, bank information or tax forms

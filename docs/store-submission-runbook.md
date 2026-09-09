@@ -34,13 +34,13 @@ order is:
 
 `build-msix.ps1` prints a warning while the placeholders are still there. Do not ignore it.
 
-## What is still missing
+## Prerequisites — all cleared
 
 These block a submission and none of them is Partner Center work:
 
 | Missing | Why it blocks | What it needs |
 | --- | --- | --- |
-| **Privacy policy URL** | Store policy 10.5.1 makes one mandatory for desktop products *regardless of what is collected* | A publicly reachable page saying Loadstone collects and transmits nothing. This repo is **private**, so GitHub Pages will not serve from it as-is — either make a small public repo for the page, or host it anywhere with a stable URL |
+| ~~Privacy policy URL~~ **done** | Store policy 10.5.1 makes one mandatory regardless of what is collected | <https://mortenbrudvik.github.io/loadstone-site/privacy/> — served from the public `mortenbrudvik/loadstone-site` repo, since this one is private |
 | ~~At least one screenshot~~ **done** | Every listing requires one | `docs/store/screenshots/01-general.png` and `02-shortcuts.png`, 1920×1080 PNG. Captured from the real app at 150% scaling. Note the window uses a Mica backdrop, so its tint carries a trace of the desktop wallpaper behind it — recapture over a plain wallpaper if a neutral tint is wanted |
 | ~~Identity values~~ **done** | See above | Reserved 2026-09-09; package rebuilt and verified |
 
@@ -111,7 +111,7 @@ prompt to.
   move windows of elevated processes** (Task Manager, an admin terminal). That is UIPI, not a bug,
   and PowerToys documents the same limitation.
 - **Screenshots:** the ones captured above.
-- **Privacy policy URL:** the page from the table above.
+- **Privacy policy URL:** `https://mortenbrudvik.github.io/loadstone-site/privacy/`
 
 ### 5. Age rating
 

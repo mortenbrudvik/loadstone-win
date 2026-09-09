@@ -92,7 +92,7 @@ dotnet run --project src/Loadstone.UI
 
 ## Troubleshooting
 
-Tray → Loadstone → **Loadstone Help** opens this page at `https://github.com/mortenbrudvik/loadstone-win#readme`. Known issue: the repository is not published yet, so that link 404s until it is.
+Tray → Loadstone → **Loadstone Help** opens <https://mortenbrudvik.github.io/loadstone-site/help/>, which carries the shortcuts, the drag zones and this troubleshooting list. That page is public even while this repository is not.
 
 **One window will not move.** Windows of programs running as administrator cannot be moved by a program that isn't, and some windows are fixed-size. Loadstone beeps and logs the refusal; everything else keeps working. Fixed-size windows are centered in the tile instead of resized.
 
