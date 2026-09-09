@@ -53,7 +53,7 @@
               <StackPanel>
                 <ui:ToggleSwitch
                     Content="Launch at login"
-                    IsChecked="{Binding LaunchAtLogin, Mode=OneWay}"
+                    IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}"
                     Command="{Binding SetLaunchAtLoginCommand}"
                     CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=IsChecked}" />
                 <DockPanel Margin="0,8,0,0">

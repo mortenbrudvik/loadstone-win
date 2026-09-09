@@ -75,8 +75,8 @@ and `SystemParametersInfo` — the same API surface Loadstone uses.
 | --- | --- | --- |
 | HKCU writes | Copy-on-write into a private per-package hive, but **merged on read** | `RegistryStartupRegistration` (5.1) |
 | `Environment.ProcessPath` | `%ProgramFiles%\WindowsApps\<PackageFullName>\`, version-stamped and re-stamped on every update | `RegistryStartupRegistration.cs:38,135-149`, `App.xaml.cs:98` |
-| New files under `%LOCALAPPDATA%\Loadstone` | Redirected to `…\Packages\<PFN>\LocalCache\Local\` | `SettingsService.cs:10-11`, `FileNativeSnapMarker.cs:20-21`, `LoggingSetup.cs:12-16` (7.3) |
-| Uninstall | Runs no application code and deletes `LocalCache` | `NativeSnap` recovery (6.1) |
+| New files under `%LOCALAPPDATA%\Loadstone` | **Not redirected.** Drafted as redirected to `…\Packages\<PFN>\LocalCache\Local\`; measured 2026-09-08 as landing at the literal path in both channels, because MSIX virtualizes the registry and not the filesystem for this package configuration | `SettingsService.cs:10-11`, `FileNativeSnapMarker.cs:20-21`, `LoggingSetup.cs:12-16` (7.3) |
+| Uninstall | Runs no application code, and removes only the package container: `%LOCALAPPDATA%\Loadstone\` and everything in it is left behind | `NativeSnap` recovery (6.1) |
 | .NET runtime | Must be self-contained; there is no MSIX framework package for the .NET desktop runtime | Publish shape (8) |
 | `RegisterHotKey`, `SetWinEventHook`, `SetWindowPos`, DWM frame bounds, `Shell_NotifyIcon`, named mutexes, `app.manifest` Per-Monitor V2 | Unchanged | Nothing |
 
@@ -196,11 +196,20 @@ warning does not get in the way.
 `SPIF_SENDCHANGE` alone.
 
 The reason is specific to MSIX and is not a preference. **MSIX uninstall runs no application code**:
-it terminates the process without `OnExit` or `SessionEnding`, and it deletes `LocalCache` — taking
-`native-snap-marker.json` with it. With a persisted write, uninstalling Loadstone while it is running
-leaves the user's drag-to-edge snapping switched off with the recovery marker destroyed, and nothing
-in the app will ever put it back. That is both a real harm and the clearest reading of Store policy
-10.2.7's clean-uninstall requirement.
+it terminates the process without `OnExit` or `SessionEnding`. With a persisted write, uninstalling
+Loadstone while it is running leaves the user's drag-to-edge snapping switched off in their profile
+and **no Loadstone will ever run again to put it back** — the app has just been uninstalled. The
+absence of a future run is what makes the persisted write unsafe. That is both a real harm and the
+clearest reading of Store policy 10.2.7's clean-uninstall requirement.
+
+This section originally argued the point from the marker instead: that uninstall deletes `LocalCache`
+and takes `native-snap-marker.json` with it. That premise is false. Measured 2026-09-08, this package
+configuration is not file-redirected at all, so an MSIX uninstall leaves `%LOCALAPPDATA%\Loadstone\`
+behind entirely — `settings.json`, `native-snap-marker.json` and the whole `Logs` directory. Leaving
+user files outside the package container is ordinary Win32 behaviour that MSIX makes no promise
+about, and is not read here as a 10.2.7 problem. The decision stands, and on firmer ground than the
+draft claimed: whether the marker survives was never load-bearing, because after an uninstall there
+is nothing left to read it.
 
 With a session-scoped write, the worst case is that the setting stays off until the next sign-out. It
 also removes the question of whether `SPIF_UPDATEINIFILE`'s profile write is itself virtualized,
@@ -279,17 +288,21 @@ Namespaces: `foundation/windows10`, `uap/windows10`, `uap/windows10/5`, and
 
 ### 7.3 Where user data lands
 
-New files written under `%LOCALAPPDATA%\Loadstone` are redirected into the package's
-`LocalCache\Local`. The redirection is accepted rather than worked around: the same
+This section was drafted expecting new files under `%LOCALAPPDATA%\Loadstone` to be redirected into
+the package's `LocalCache\Local`. Measured 2026-09-08, they are not: the writes land at the literal
+path in both channels, because MSIX virtualizes the registry and not the filesystem for this package
+configuration. Nothing in the code turns on which way it went — the same
 `Environment.SpecialFolder.LocalApplicationData` expression stays in `SettingsService`,
-`FileNativeSnapMarker` and `LoggingSetup`, and resolves correctly in both channels. No migration is
-owed — the repository has no tags and no published release, so no installed copy exists whose
-settings could be stranded.
+`FileNativeSnapMarker` and `LoggingSetup`, and resolves correctly either way. No migration is owed —
+the repository has no tags and no published release, so no installed copy exists whose settings could
+be stranded.
 
-The consequence that does need handling is that `README.md:111` quotes a path that is wrong for a
-Store install. An **"Open log folder"** button is added to the Settings window beside the existing
-"Open Startup Apps", opening `LoggingSetup.LogDirectory` as it actually resolved. The tray menu is
-left alone: it mirrors the Mac's menu, and this belongs with the other diagnostics.
+With no redirection, the path `README.md` quotes is right for a Store install after all, and the
+consequence this section set out to handle does not exist. The **"Open log folder"** button added to
+the Settings window beside the existing "Open Startup Apps" is kept on its own merits rather than the
+drafted one: it resolves the path instead of making the user type it, and it stays correct on the day
+the behaviour does change. The tray menu is left alone: it mirrors the Mac's menu, and this belongs
+with the other diagnostics.
 
 ### 7.4 Assets
 

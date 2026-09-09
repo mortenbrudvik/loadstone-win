@@ -35,6 +35,32 @@ public class SettingsViewModelTests
     }
 
     /// <summary>
+    /// The packaged launch-at-login write is an out-of-process call and the dispatcher keeps pumping
+    /// input for the whole of it; nothing disables the drag switch, which belongs to a different
+    /// command. One flag doing both echo suppression and write re-entrancy turned that click into a
+    /// no-op - the switch rendered on, settings.json was never written, and since the view model is a
+    /// singleton that never re-reads the setting, the two stayed apart for the lifetime of the
+    /// process. The gate holds the write open so the interleaving is the test and not a race.
+    /// </summary>
+    [Fact]
+    public async Task DragSnappingEnabled_ChangedWhileALaunchAtLoginWriteIsInFlight_StillPersists()
+    {
+        var gate = new TaskCompletionSource<bool>();
+        _startup.EnableAsync().Returns(gate.Task);
+        var vm = NewViewModel();
+        vm.DragSnappingEnabled.ShouldBeFalse();
+
+        var inFlight = vm.SetLaunchAtLoginCommand.ExecuteAsync(true);
+        vm.DragSnappingEnabled = true;
+
+        _settings.Current.DragSnappingEnabled.ShouldBeTrue();
+
+        gate.SetResult(true);
+        await inFlight;
+        _settings.Current.DragSnappingEnabled.ShouldBeTrue();
+    }
+
+    /// <summary>
     /// The toggle drives a command rather than a property setter (see
     /// <see cref="SettingsViewModel.SetLaunchAtLoginCommand"/>), so exercising the on/off paths here
     /// goes through the command rather than assigning <see cref="SettingsViewModel.LaunchAtLogin"/>
@@ -66,8 +92,11 @@ public class SettingsViewModelTests
 
     /// <summary>
     /// The registry refusing the write is reported, not thrown, so the rollback is the view model's
-    /// job: re-read the registry and say so. Symptom if this regresses: the toggle stays on while
-    /// nothing is registered, and the user is told nothing.
+    /// job: re-read the registry, tell the view, and say so. The subject is the notification and not
+    /// the value, because the value was never wrong - a refused enable leaves LaunchAtLogin exactly
+    /// where it started, so asserting on it cannot fail, and only a PropertyChanged moves the switch
+    /// back from where the click put it. Symptom if this regresses: the toggle stays on while nothing
+    /// is registered.
     /// </summary>
     [Fact]
     public async Task LaunchAtLogin_WhenTheRegistryWriteFails_RollsBackAndExplains()
@@ -75,9 +104,12 @@ public class SettingsViewModelTests
         _startup.Status.Returns(StartupStatus.NotRegistered);
         _startup.EnableAsync().Returns(false);
         var vm = NewViewModel();
+        var notified = new List<string?>();
+        vm.PropertyChanged += (_, e) => notified.Add(e.PropertyName);
 
         await vm.SetLaunchAtLoginCommand.ExecuteAsync(true);
 
+        notified.ShouldContain(nameof(SettingsViewModel.LaunchAtLogin));
         vm.LaunchAtLogin.ShouldBeFalse();
         vm.LaunchAtLoginActionMessage.ShouldContain("refused");
         await _startup.Received(1).EnableAsync();
@@ -104,6 +136,9 @@ public class SettingsViewModelTests
     /// <summary>
     /// Symptom if this regresses: the switch stays where the user put it while nothing was written,
     /// which is the exact silent lie the packaged Run key produced and this whole change exists to stop.
+    /// Asserted as a notification for the reason given on
+    /// <see cref="LaunchAtLogin_WhenTheRegistryWriteFails_RollsBackAndExplains"/> - the value never
+    /// moves on a refused enable, so it is the notification that carries the correction to the view.
     /// </summary>
     [Fact]
     public async Task SetLaunchAtLogin_WhenTheWriteFails_RollsBackAndExplains()
@@ -111,9 +146,12 @@ public class SettingsViewModelTests
         _startup.EnableAsync().Returns(false);
         _startup.Status.Returns(StartupStatus.NotRegistered);
         var vm = NewViewModel();
+        var notified = new List<string?>();
+        vm.PropertyChanged += (_, e) => notified.Add(e.PropertyName);
 
         await vm.SetLaunchAtLoginCommand.ExecuteAsync(true);
 
+        notified.ShouldContain(nameof(SettingsViewModel.LaunchAtLogin));
         vm.LaunchAtLogin.ShouldBeFalse();
         vm.LaunchAtLoginActionMessage.ShouldNotBeNullOrWhiteSpace();
     }
@@ -221,8 +259,12 @@ public class SettingsViewModelTests
     }
 
     /// <summary>
-    /// Under MSIX the log directory is redirected into the package's LocalCache, so a user cannot be
-    /// told a literal path. The command is the only honest way to point at it.
+    /// NLog creates the log directory on first write, so on a run where logging failed - exactly when
+    /// a user is sent looking - it is not there yet. The command creates it first and must survive a
+    /// creation that is refused: an escape from a button click on the UI thread ends the process.
+    /// The path itself is the literal %LOCALAPPDATA%\Loadstone\Logs in both channels - MSIX does not
+    /// redirect file-system writes for this package - so the button is a convenience, not the only
+    /// honest way to name it.
     /// </summary>
     [Fact]
     public void OpenLogFolder_DoesNotThrow_EvenWhenTheDirectoryIsNotThereYet()

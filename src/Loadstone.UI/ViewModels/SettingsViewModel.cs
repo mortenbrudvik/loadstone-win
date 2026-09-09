@@ -16,7 +16,23 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private readonly IStartupRegistration _startup;
     private readonly ILogger<SettingsViewModel> _logger;
-    private bool _applying;
+
+    /// <summary>
+    /// Echo suppression, raised while the view model assigns its own properties so that showing state
+    /// it has just read does not write it straight back. Raised and cleared synchronously, by
+    /// <see cref="WithoutSideEffects"/> and nowhere else.
+    /// </summary>
+    private bool _loading;
+
+    /// <summary>
+    /// <see cref="SetLaunchAtLogin"/>'s re-entrancy guard, held across the write so a second click
+    /// cannot start a second one. Deliberately not the same flag as <see cref="_loading"/>: the
+    /// packaged write is an out-of-process call and the dispatcher pumps input for the whole of it,
+    /// so anything a suppression flag swallowed in that window would be a real user change. One flag
+    /// doing both jobs is how a click on <see cref="DragSnappingEnabled"/> during a launch-at-login
+    /// write used to be dropped - silently, and for the lifetime of the process.
+    /// </summary>
+    private bool _writing;
 
     public SettingsViewModel(ISettingsService settings, IStartupRegistration startup, ILogger<SettingsViewModel> logger)
     {
@@ -66,7 +82,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnDragSnappingEnabledChanged(bool value)
     {
-        if (_applying)
+        if (_loading)
         {
             return;
         }
@@ -83,19 +99,25 @@ internal sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task SetLaunchAtLogin(bool value)
     {
-        if (_applying)
+        if (_writing)
         {
             return;
         }
 
-        _applying = true;
+        _writing = true;
         try
         {
             // Cleared before the write, not after: a fresh attempt should start without whatever an
             // earlier one left behind, whether this one goes on to succeed or fail in turn.
             LaunchAtLoginActionMessage = "";
             var written = value ? await _startup.EnableAsync() : await _startup.DisableAsync();
-            RefreshStartup();
+
+            // The asynchronous refresh, not the plain one. This is the single place where the state is
+            // guaranteed to have just moved, and the packaged implementation's Status is a snapshot
+            // from the last InitializeAsync rather than a live query: re-reading that snapshot here
+            // would report the pre-write value and flip the switch back after a write that succeeded.
+            // The registry path re-reads the registry on every Status get, so there it costs nothing.
+            await RefreshStartupAsync();
             if (!written)
             {
                 LaunchAtLoginActionMessage = "Could not change Launch at login; Windows refused.";
@@ -103,7 +125,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
         }
         finally
         {
-            _applying = false;
+            _writing = false;
         }
     }
 
@@ -122,7 +144,12 @@ internal sealed partial class SettingsViewModel : ObservableObject
         {
             Directory.CreateDirectory(LoggingSetup.LogDirectory);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
+        // Wider than this path is likely to need, on purpose: an escape from a button click on the UI
+        // thread ends the process and takes the hotkeys and the user's edge snapping with it, which is
+        // the rule IStartupRegistration states about itself twice. CreateDirectory can also answer
+        // ArgumentException or NotSupportedException for a path it will not accept.
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException
+            or ArgumentException or NotSupportedException)
         {
             _logger.LogError(ex, "could not create the log directory before opening it");
         }
@@ -139,6 +166,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
     public void RefreshStartup()
     {
         var status = _startup.Status;
+
+        // LaunchAtLogin has no setter side effect since the write moved onto SetLaunchAtLogin, so this
+        // wrapper suppresses nothing today. Kept deliberately rather than by accident: the assignment
+        // is a read being shown, and the day the property grows a hook the wrapper is the difference
+        // between showing state and writing it straight back.
         WithoutSideEffects(() => LaunchAtLogin = status is StartupStatus.Enabled
             or StartupStatus.DisabledInTaskManager or StartupStatus.EnabledByPolicy);
 
@@ -152,6 +184,13 @@ internal sealed partial class SettingsViewModel : ObservableObject
             StartupStatus.NotRegistered => "",
             StartupStatus.Enabled => "",
         };
+
+        // Unconditional, and load-bearing. After a refused write the corrective value is often the one
+        // the property already holds, and [ObservableProperty] suppresses the notification on an equal
+        // value - so the switch would keep the position the click gave it while the platform holds the
+        // opposite. The two-way binding in SettingsWindow.xaml makes the ordinary case a real change,
+        // but a notification is what the view consumes, so it is raised rather than relied upon.
+        OnPropertyChanged(nameof(LaunchAtLogin));
     }
 
     /// <summary>
@@ -171,22 +210,21 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// Runs <paramref name="assign"/> with the property setters' side effects off, so showing state
-    /// that was just read does not write it straight back. Saves and restores the flag rather than
-    /// clearing it, because it nests: <see cref="RefreshStartup"/> also runs from inside
-    /// <see cref="SetLaunchAtLogin"/>, which set the flag first and still needs it set when this
-    /// returns.
+    /// that was just read does not write it straight back. Saves and restores <see cref="_loading"/>
+    /// rather than clearing it, so that it nests: a bare clear in an inner call would unsuppress the
+    /// outer one for the rest of its assignment.
     /// </summary>
     private void WithoutSideEffects(Action assign)
     {
-        var was = _applying;
-        _applying = true;
+        var was = _loading;
+        _loading = true;
         try
         {
             assign();
         }
         finally
         {
-            _applying = was;
+            _loading = was;
         }
     }
 }

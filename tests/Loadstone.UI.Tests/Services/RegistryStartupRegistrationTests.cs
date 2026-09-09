@@ -109,21 +109,23 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     // instead of ending the process - is pinned at the consuming seam in SettingsViewModelTests,
     // which substitutes IStartupRegistration and needs no real ACL.
 
+    /// <summary>
+    /// InitializeAsync rewrites an entry that is stale; it does not create one. Symptom if this
+    /// regresses: unticking Launch at login and relaunching puts the login item straight back.
+    /// The stale-rewrite half this test used to assert as well is the subject of
+    /// <see cref="InitializeAsync_RewritesAPathThatIsNoLongerThere"/>, so it is asserted there and
+    /// only set up here.
+    /// </summary>
     [Fact]
-    public async Task RefreshPathIfStale_RewritesAPathThatIsNoLongerThere_AndLeavesAnUnregisteredEntryAlone()
+    public async Task InitializeAsync_WhenTheEntryWasRemoved_DoesNotPutItBack()
     {
-        var gone = Path.Combine(Path.GetTempPath(), "loadstone-tests", Guid.NewGuid().ToString("N"), "Loadstone.exe");
-        File.Exists(gone).ShouldBeFalse();
+        var registration = NewRegistration(exe: @"C:\gone\Loadstone.exe");
+        await registration.EnableAsync();
+        await registration.DisableAsync();
 
-        await NewRegistration(gone).EnableAsync();
-        var moved = NewRegistration(@"C:\new\Loadstone.exe");
-        await moved.InitializeAsync();
-        using var key = Registry.CurrentUser.OpenSubKey(RunKey);
-        key!.GetValue("Loadstone").ShouldBe("\"C:\\new\\Loadstone.exe\"");
+        await registration.InitializeAsync();
 
-        await moved.DisableAsync();
-        await moved.InitializeAsync();
-        moved.Status.ShouldBe(StartupStatus.NotRegistered);
+        registration.Status.ShouldBe(StartupStatus.NotRegistered);
     }
 
     /// <summary>
@@ -131,7 +133,7 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     /// user's login item at whichever build happens to run, a build output directory included.
     /// </summary>
     [Fact]
-    public async Task RefreshPathIfStale_LeavesARegisteredPathThatStillExists_Alone()
+    public async Task InitializeAsync_WhenTheRegisteredPathStillExists_LeavesItAlone()
     {
         var stillThere = Environment.ProcessPath.ShouldNotBeNull();
         await NewRegistration(stillThere).EnableAsync();

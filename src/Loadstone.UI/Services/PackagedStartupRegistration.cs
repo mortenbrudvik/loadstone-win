@@ -46,14 +46,18 @@ internal sealed class PackagedStartupRegistration : IStartupRegistration
     {
         get
         {
-            if (_task is null)
+            // A local, not the field: InitializeAsync is safely re-callable and reassigns _task, which
+            // can now land between the null check and the dereference - ShowSettings queues a refresh
+            // that re-initializes while a write may be in flight.
+            var task = _task;
+            if (task is null)
             {
                 return StartupStatus.Unknown;
             }
 
             try
             {
-                return Map(_task.State);
+                return Map(task.State);
             }
             catch (Exception ex)
             {
@@ -87,7 +91,9 @@ internal sealed class PackagedStartupRegistration : IStartupRegistration
 
     public async Task<bool> EnableAsync()
     {
-        if (_task is null)
+        // A local, for the reason given on Status.
+        var task = _task;
+        if (task is null)
         {
             return false;
         }
@@ -95,7 +101,7 @@ internal sealed class PackagedStartupRegistration : IStartupRegistration
         try
         {
             // Answers the state it ended in, which is DisabledByUser when the user has overruled us.
-            return await _task.RequestEnableAsync() is StartupTaskState.Enabled or StartupTaskState.EnabledByPolicy;
+            return await task.RequestEnableAsync() is StartupTaskState.Enabled or StartupTaskState.EnabledByPolicy;
         }
         catch (Exception ex)
         {
@@ -106,14 +112,16 @@ internal sealed class PackagedStartupRegistration : IStartupRegistration
 
     public Task<bool> DisableAsync()
     {
-        if (_task is null)
+        // A local, for the reason given on Status.
+        var task = _task;
+        if (task is null)
         {
             return Task.FromResult(false);
         }
 
         try
         {
-            _task.Disable();
+            task.Disable();
             return Task.FromResult(true);
         }
         catch (Exception ex)

@@ -60,7 +60,9 @@ switch ($Action) {
             'minor' { $new = "$($n[0]).$([int]$n[1] + 1).0" }
             'patch' { $new = "$($n[0]).$($n[1]).$([int]$n[2] + 1)" }
         }
-        [System.IO.File]::WriteAllText($versionFile, "{`n  `"version`": `"$new`"`n}`n")
+        # CRLF, matching the committed file. version.json is CRLF and the repo has no .gitattributes,
+        # so writing LF here would turn the first bump into a whole-file diff.
+        [System.IO.File]::WriteAllText($versionFile, "{`r`n  `"version`": `"$new`"`r`n}`r`n")
         "version.json -> $new"
         Set-Version $new
     }

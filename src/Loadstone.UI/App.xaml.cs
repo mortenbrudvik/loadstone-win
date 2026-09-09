@@ -94,7 +94,11 @@ public partial class App : Application
         // A logoff or a restart ends the process without ever reaching OnExit.
         SystemEvents.SessionEnding += RestoreOnSessionEnd;
 
-        // Order matters, as on the Mac: native snap off before the first drag can happen, monitors last.
+        // Order matters, as on the Mac: whatever Follow() settles on has to be in place before the
+        // first drag can happen, monitors last. Not unconditional suppression - DragSnappingEnabled
+        // defaults to false, so on an ordinary first run Follow() turns nothing off and only puts back
+        // what an unclean exit left off. It is the run where consent is already given that needs this
+        // order.
         nativeSnap.Follow();
         services.GetRequiredService<TrayController>();
         services.GetRequiredService<HotkeyCenter>().Start();

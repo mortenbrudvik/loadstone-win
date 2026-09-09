@@ -55,6 +55,14 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with $LASTEXITCODE" }
 if (-not (Test-Path (Join-Path $stage 'Loadstone.exe'))) { throw "publish produced no Loadstone.exe in $stage" }
 
 Copy-Item (Join-Path $root 'packaging/msix/AppxManifest.xml') $stage
+
+# The manifest ships Identity placeholders until the Partner Center reservation exists. Both are
+# schema-valid ('Name' allows [-.A-Za-z0-9], 'CN=...' is a valid DN), so makeappx, this script and the
+# tag-driven release all report success for a package Partner Center rejects on identity mismatch.
+# A warning and deliberately not a throw: a hard failure would block the local packaging path.
+if ((Get-Content (Join-Path $stage 'AppxManifest.xml') -Raw) -match 'PLACEHOLDER') {
+    Write-Warning "the manifest still holds the identity placeholders; this package can be installed locally but cannot be submitted to the Store"
+}
 Copy-Item (Join-Path $root 'packaging/msix/Assets') $stage -Recurse
 
 # resources.pri is required: a manifest naming Square44x44Logo.png while only scale-qualified files
