@@ -36,7 +36,7 @@ These block a submission and none of them is Partner Center work:
 | Missing | Why it blocks | What it needs |
 | --- | --- | --- |
 | **Privacy policy URL** | Store policy 10.5.1 makes one mandatory for desktop products *regardless of what is collected* | A publicly reachable page saying Loadstone collects and transmits nothing. This repo is **private**, so GitHub Pages will not serve from it as-is — either make a small public repo for the page, or host it anywhere with a stable URL |
-| **At least one screenshot** | Every listing requires one; the repo has none (only the generated MSIX tile assets) | Run the app, open Settings, capture both tabs at 1366×768 or larger, PNG |
+| ~~At least one screenshot~~ **done** | Every listing requires one | `docs/store/screenshots/01-general.png` and `02-shortcuts.png`, 1920×1080 PNG. Captured from the real app at 150% scaling. Note the window uses a Mica backdrop, so its tint carries a trace of the desktop wallpaper behind it — recapture over a plain wallpaper if a neutral tint is wanted |
 | **Identity values** | See the trap above | Only obtainable by reserving the name first |
 
 ## What to do in Partner Center
