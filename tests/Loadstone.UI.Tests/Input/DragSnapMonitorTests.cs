@@ -65,7 +65,10 @@ public class DragSnapMonitorTests
     private static readonly Rect Baseline = new(300, 300, 401, 301);
 
     private readonly FakeMoveSizeEvents _events = new();
-    private readonly InMemorySettings _settings = new();
+
+    // Drag snapping defaults off (Store consent policy), but this fixture is about the monitor, not
+    // that default, and every test but one below is written against a hook that starts installed.
+    private readonly InMemorySettings _settings = new() { Current = { DragSnappingEnabled = true } };
     private readonly ISnapPreview _preview = Substitute.For<ISnapPreview>();
     private readonly Dictionary<nint, FakeWindow> _windows = new();
 

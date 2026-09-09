@@ -9,8 +9,12 @@ namespace Loadstone.Core.Settings;
 /// </remarks>
 public sealed class AppSettings : IReadOnlyAppSettings
 {
-    /// <summary>Opt-out: absent means on, as on the Mac.</summary>
-    public bool DragSnappingEnabled { get; set; } = true;
+    /// <summary>
+    /// Off until the user turns it on. Turning it on is what consents to Loadstone switching Windows'
+    /// own edge snapping off while it runs; the Mac defaults this on, but the Mac is not distributed
+    /// through a store that requires consent before an app changes a system setting.
+    /// </summary>
+    public bool DragSnappingEnabled { get; set; }
 
     /// <summary>
     /// Customized shortcuts keyed by command id. An absent id means the default; an empty string

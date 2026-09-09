@@ -6,5 +6,16 @@ obj/
 TestResults/
 publish/
 installer-output/
+*.msix
+*.msixbundle
+*.msixupload
+*.appx
+*.appxbundle
+*.appxupload
+packaging/msix/staging/
+*.pfx
+*.cer
+*.p12
+*.snk
 .claude/worktrees/
 .superpowers/

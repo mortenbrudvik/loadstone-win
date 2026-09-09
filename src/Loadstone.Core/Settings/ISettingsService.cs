@@ -5,6 +5,13 @@ public interface ISettingsService
     /// <summary>Read-only on purpose: <see cref="Update"/> is the only path that saves and notifies.</summary>
     IReadOnlyAppSettings Current { get; }
 
+    /// <summary>
+    /// True when there was no settings file to load, i.e. this is the first launch on this profile.
+    /// Not persisted: the file's own existence is the fact, and a flag would have to be written
+    /// before the user had agreed to anything.
+    /// </summary>
+    bool IsFirstRun { get; }
+
     /// <summary>Applies <paramref name="change"/> to <see cref="Current"/>, saves, and raises <see cref="Changed"/>.</summary>
     /// <returns>
     /// False when the save did not reach disk. The change still applies to this run, which is all a

@@ -44,20 +44,29 @@
                     Margin="0,8,0,0"
                     Appearance="Secondary"
                     FontTypography="Caption"
-                    Text="Windows' own edge snapping is off while Loadstone runs."
-                    Visibility="{Binding DragSnappingEnabled, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    TextWrapping="Wrap"
+                    Text="Turning this on switches off Windows' own drag-to-edge snapping while Loadstone runs, so the two do not fight. It comes back when you turn this off, when Loadstone quits, or when you sign out." />
               </StackPanel>
             </ui:Card>
 
             <ui:Card Margin="0,0,0,12">
               <StackPanel>
-                <ui:ToggleSwitch Content="Launch at login" IsChecked="{Binding LaunchAtLogin}" />
+                <ui:ToggleSwitch
+                    Content="Launch at login"
+                    IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}"
+                    Command="{Binding SetLaunchAtLoginCommand}"
+                    CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=IsChecked}" />
                 <DockPanel Margin="0,8,0,0">
                   <ui:Button
                       DockPanel.Dock="Right"
                       Content="Open Startup Apps"
                       Command="{Binding OpenStartupAppsCommand}"
                       Visibility="{Binding ShowOpenStartupApps, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                  <ui:Button
+                      DockPanel.Dock="Right"
+                      Margin="8,0,0,0"
+                      Content="Open log folder"
+                      Command="{Binding OpenLogFolderCommand}" />
                   <ui:TextBlock
                       VerticalAlignment="Center"
                       Appearance="Secondary"
@@ -65,6 +74,13 @@
                       TextWrapping="Wrap"
                       Text="{Binding LaunchAtLoginMessage}" />
                 </DockPanel>
+                <ui:TextBlock
+                    Margin="0,4,0,0"
+                    Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                    FontTypography="Caption"
+                    TextWrapping="Wrap"
+                    Text="{Binding LaunchAtLoginActionMessage}"
+                    Visibility="{Binding LaunchAtLoginActionMessage, Converter={StaticResource StringToVisibilityConverter}}" />
               </StackPanel>
             </ui:Card>
 

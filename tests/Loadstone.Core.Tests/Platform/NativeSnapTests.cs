@@ -472,6 +472,7 @@ public class NativeSnapTests
     [Fact]
     public void Follow_AppliesTheSettingStraightAway()
     {
+        _settings.Current.DragSnappingEnabled = true;
         var snap = NewNativeSnap();
         snap.Follow();
 
@@ -501,6 +502,7 @@ public class NativeSnapTests
         // Restore had just put back and turned both flags off again, so the user lost Windows' edge
         // snapping on every quit and after every crash. The marker has its own store now, but the
         // guard still has to hold - see the legacy-marker test below, which still raises Changed.
+        _settings.Current.DragSnappingEnabled = true;
         var snap = NewNativeSnap();
         snap.Follow();
 
@@ -541,6 +543,7 @@ public class NativeSnapTests
     [Fact]
     public void Follow_AppliesAgain_WhenTheSettingActuallyFlips()
     {
+        _settings.Current.DragSnappingEnabled = true;
         var snap = NewNativeSnap();
         snap.Follow();
         snap.IsSuppressing.ShouldBeTrue();
@@ -562,6 +565,7 @@ public class NativeSnapTests
     [Fact]
     public void Follow_IgnoresSettingsChanges_ThatAreNotTheDragSnappingToggle()
     {
+        _settings.Current.DragSnappingEnabled = true;
         var snap = NewNativeSnap();
         snap.Follow();
         var writes = _native.Writes.Count;
@@ -576,6 +580,7 @@ public class NativeSnapTests
     [Fact]
     public void Follow_Twice_AppliesAndSubscribesOnlyOnce()
     {
+        _settings.Current.DragSnappingEnabled = true;
         var snap = NewNativeSnap();
         snap.Follow();
         var writes = _native.Writes.Count;
@@ -590,6 +595,7 @@ public class NativeSnapTests
     [Fact]
     public void StopFollowing_LeavesTheSettingUnwatched()
     {
+        _settings.Current.DragSnappingEnabled = true;
         var snap = NewNativeSnap();
         snap.Follow();
         snap.StopFollowing();

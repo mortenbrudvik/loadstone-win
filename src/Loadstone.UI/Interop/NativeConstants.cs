@@ -62,7 +62,6 @@ internal static class NativeConstants
     public const uint SPI_SETSNAPSIZING = 0x008F;
     public const uint SPI_GETDOCKMOVING = 0x0090;
     public const uint SPI_SETDOCKMOVING = 0x0091;
-    public const uint SPIF_UPDATEINIFILE = 0x0001;
     public const uint SPIF_SENDCHANGE = 0x0002;
 
     // Keyboard
@@ -71,4 +70,9 @@ internal static class NativeConstants
 
     // MessageBeep
     public const uint MB_OK = 0x0000;
+
+    // Package identity. GetCurrentPackageFullName answers with an error code rather than a BOOL:
+    // this one means the process has no package, anything else (including ERROR_INSUFFICIENT_BUFFER
+    // from a zero-length buffer) means it has one.
+    public const int APPMODEL_ERROR_NO_PACKAGE = 15700;
 }

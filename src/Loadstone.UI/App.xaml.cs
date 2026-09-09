@@ -9,6 +9,7 @@ using Loadstone.UI.Input;
 using Loadstone.UI.Interop;
 using Loadstone.UI.Services;
 using Loadstone.UI.Tray;
+using Loadstone.UI.ViewModels;
 using Loadstone.UI.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -93,9 +94,12 @@ public partial class App : Application
         // A logoff or a restart ends the process without ever reaching OnExit.
         SystemEvents.SessionEnding += RestoreOnSessionEnd;
 
-        // Order matters, as on the Mac: native snap off before the first drag can happen, monitors last.
+        // Order matters, as on the Mac: whatever Follow() settles on has to be in place before the
+        // first drag can happen, monitors last. Not unconditional suppression - DragSnappingEnabled
+        // defaults to false, so on an ordinary first run Follow() turns nothing off and only puts back
+        // what an unclean exit left off. It is the run where consent is already given that needs this
+        // order.
         nativeSnap.Follow();
-        services.GetRequiredService<RegistryStartupRegistration>().RefreshPathIfStale();
         services.GetRequiredService<TrayController>();
         services.GetRequiredService<HotkeyCenter>().Start();
         var drag = services.GetRequiredService<DragSnapMonitor>();
@@ -112,12 +116,11 @@ public partial class App : Application
         // is already there and not empty, so only a change in it proves this run's own line landed.
         var logLengthBeforeLaunch = LoggingSetup.CurrentLogLength();
         _logger.LogInformation(
-            "launched: version {Version} dragSnapping={Drag} monitoring={Monitoring} nativeSnapSuppressed={Suppressed} startup={Startup}",
+            "launched: version {Version} dragSnapping={Drag} monitoring={Monitoring} nativeSnapSuppressed={Suppressed}",
             typeof(App).Assembly.GetName().Version,
             settings.Current.DragSnappingEnabled,
             drag.IsMonitoring,
-            nativeSnap.IsSuppressing,
-            services.GetRequiredService<IStartupRegistration>().Status);
+            nativeSnap.IsSuppressing);
 
         // Flush it, then look for it. Everything the user could ever be told about this app goes
         // through NLog, and NLog reports nothing when it cannot write, so the answer cannot come
@@ -125,6 +128,40 @@ public partial class App : Application
         // which is the one place a later diagnosis can read it from.
         NLog.LogManager.Flush(LogFlushTimeout);
         LoggingSetup.VerifyWritable(logLengthBeforeLaunch);
+
+        // Package identity has to be asked over an asynchronous WinRT call and OnStartup cannot await:
+        // the dispatcher does not pump until it returns (see the single-instance note above), so an
+        // await here would let a queued second launch build Settings from a half-finished container.
+        // Queue it instead. The Settings window is only ever built on a user action, which cannot
+        // happen before this lands.
+        Dispatcher.BeginInvoke(() => _ = InitializeStartupAsync(services, settings));
+    }
+
+    /// <summary>
+    /// The deferred half of startup. Not everything below is guaranteed not to throw:
+    /// <see cref="PackagedStartupRegistration.InitializeAsync"/> catches broadly by design, but
+    /// <see cref="RegistryStartupRegistration.InitializeAsync"/> only catches registry refusals and
+    /// lets a genuine bug through. What actually makes this safe to fire-and-forget is
+    /// <see cref="TaskScheduler.UnobservedTaskException"/>, wired up in
+    /// <see cref="InstallExceptionHandlers"/>: an exception here is captured on the discarded task
+    /// rather than thrown synchronously, and is only observed - logged, not crashed on - once that
+    /// task is finalized.
+    /// </summary>
+    private async Task InitializeStartupAsync(IServiceProvider services, ISettingsService settings)
+    {
+        var startup = services.GetRequiredService<IStartupRegistration>();
+        await startup.InitializeAsync();
+        services.GetRequiredService<ILogger<App>>().LogInformation("launch at login: {Startup}", startup.Status);
+
+        // First run opens Settings so the drag-snapping toggle and its explanation are in front of the
+        // user before anything changes a Windows setting — and so a tray-only app has a window a Store
+        // reviewer can reach from the Start menu. Here rather than in OnStartup, so the launch-at-login
+        // row shows a state that has actually been read. ShowSettings uses Show(), never ShowDialog():
+        // a modal would run a nested dispatcher loop and defeat the ordering OnStartup depends on.
+        if (settings.IsFirstRun)
+        {
+            ShowSettings();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -185,7 +222,33 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private void ShowSettings() => _host?.Services.GetRequiredService<SettingsWindow>().ShowAndActivate();
+    /// <summary>
+    /// Queues a re-read of the packaged startup status before showing the window. Resolved from the
+    /// container rather than through the window, because the queued refresh must reach the same
+    /// singleton <see cref="SettingsViewModel"/> instance the window is bound to, not a copy of it -
+    /// see <see cref="SettingsViewModel.RefreshStartupAsync"/> for why the re-read exists at all.
+    /// Queued with the same fire-and-forget idiom as <see cref="InitializeStartupAsync"/>: showing the
+    /// window must stay synchronous. On a single open, the queued refresh lands before the user can
+    /// touch the toggle, since nothing pumps the dispatcher between here and
+    /// <see cref="SettingsWindow.ShowAndActivate"/> returning - but nothing here checks whether the
+    /// window is already showing, so a second trigger (a tray click while Settings is already open)
+    /// queues a second refresh on top of whatever the user is doing. That is exactly why
+    /// <see cref="SettingsViewModel.LaunchAtLoginActionMessage"/> is a separate slot from
+    /// <see cref="SettingsViewModel.LaunchAtLoginMessage"/>: a redundant refresh here must not be able
+    /// to erase feedback about a write the user just made.
+    /// </summary>
+    private void ShowSettings()
+    {
+        if (_host is not { } host)
+        {
+            return;
+        }
+
+        var services = host.Services;
+        var settings = services.GetRequiredService<SettingsViewModel>();
+        Dispatcher.BeginInvoke(() => _ = settings.RefreshStartupAsync());
+        services.GetRequiredService<SettingsWindow>().ShowAndActivate();
+    }
 
     /// <summary>
     /// Takes the single-instance mutex and returns the event to listen on, or asks the Loadstone

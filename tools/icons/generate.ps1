@@ -5,7 +5,10 @@
 # loadstone.ico  : the app icon, the shaded pebble on a transparent ground
 # tray-dark.ico  : the same pebble for the dark taskbar, with a stronger edge so it separates from the bar
 # tray-light.ico : the same pebble for the light taskbar, with a lighter touch of that edge
-param([string]$OutDir = (Join-Path $PSScriptRoot '..\..\src\Loadstone.UI\Assets'))
+param(
+    [string]$OutDir = (Join-Path $PSScriptRoot '..\..\src\Loadstone.UI\Assets'),
+    [string]$MsixAssetDir = (Join-Path $PSScriptRoot '..\..\packaging\msix\Assets')
+)
 
 Add-Type -AssemblyName System.Drawing
 
@@ -41,6 +44,14 @@ function Write-Ico([string]$path, [int[]]$sizes, [scriptblock]$draw) {
     }
     foreach ($frame in $frames) { $writer.Write([byte[]]$frame[1]) }
     $writer.Dispose(); $stream.Dispose()
+    "wrote $path"
+}
+
+# The MSIX asset set. Unlike the .ico files these are single-size PNGs on a transparent ground; the
+# tile plate supplies the background, so they use the app-icon treatment ($edge 0) rather than either
+# tray variant's stronger rim.
+function Write-Png([string]$path, [int]$size, [scriptblock]$draw) {
+    [System.IO.File]::WriteAllBytes($path, (New-PngFrame $size $draw))
     "wrote $path"
 }
 
@@ -141,3 +152,31 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s 1.12 0 }
 Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 1.6 }
 Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 0.5 }
+
+New-Item -ItemType Directory -Force $MsixAssetDir | Out-Null
+
+# Square44x44Logo and Square150x150Logo at every scale the Store asks for, StoreLogo at two, and the
+# targetsize variants for the taskbar. Without an _altform-unplated variant Windows draws the icon on
+# a coloured backplate.
+$appIcon = { param($g, $s) Draw-Pebble $g $s 1.12 0 }
+
+foreach ($scale in 100, 125, 150, 200, 400) {
+    Write-Png (Join-Path $MsixAssetDir "Square44x44Logo.scale-$scale.png")   ([int][math]::Round(44 * $scale / 100.0))  $appIcon
+    Write-Png (Join-Path $MsixAssetDir "Square150x150Logo.scale-$scale.png") ([int][math]::Round(150 * $scale / 100.0)) $appIcon
+}
+
+foreach ($scale in 100, 200) {
+    Write-Png (Join-Path $MsixAssetDir "StoreLogo.scale-$scale.png") ([int][math]::Round(50 * $scale / 100.0)) $appIcon
+}
+
+# The _altform-unplated variants are drawn straight onto the taskbar with no plate behind them, and
+# Windows ships one such file regardless of the user's taskbar theme (there is no light/dark
+# selection outside high-contrast mode). tray-dark.ico's edge of 1.6 is tuned for exactly this
+# "separate from a dark bar at 16 px" case; on a light bar the pebble is dark enough that it reads
+# fine either way, so the same value is the one that works on both.
+$unplatedIcon = { param($g, $s) Draw-Pebble $g $s 1.12 1.6 }
+
+foreach ($target in 16, 24, 32, 48, 256) {
+    Write-Png (Join-Path $MsixAssetDir "Square44x44Logo.targetsize-$target.png") $target $appIcon
+    Write-Png (Join-Path $MsixAssetDir "Square44x44Logo.targetsize-${target}_altform-unplated.png") $target $unplatedIcon
+}
