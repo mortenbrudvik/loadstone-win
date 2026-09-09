@@ -11,8 +11,8 @@
        rejected at upload. Version is written by scripts/version-manager.ps1 from version.json; its
        fourth field is reserved for the Store and must stay 0. -->
   <Identity
-      Name="PUBLISHER-PLACEHOLDER.Loadstone"
-      Publisher="CN=PUBLISHER-PLACEHOLDER"
+      Name="MortenBrudvik.Loadstone"
+      Publisher="CN=E6ED6F6D-88CB-42AC-BED3-B0FA24EC28DD"
       Version="1.0.0.0"
       ProcessorArchitecture="x64" />
 

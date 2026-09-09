@@ -8,12 +8,17 @@ Everything after this first submission can be automated with `msstore` and
 
 ## The trap: reserve the name *before* building the package you submit
 
-`packaging/msix/AppxManifest.xml` currently ships placeholders:
+**Done, 2026-09-09.** The name is reserved and the real values are in
+`packaging/msix/AppxManifest.xml`:
 
-```xml
-Name="PUBLISHER-PLACEHOLDER.Loadstone"
-Publisher="CN=PUBLISHER-PLACEHOLDER"
-```
+| Field | Value |
+| --- | --- |
+| `Package/Identity/Name` | `MortenBrudvik.Loadstone` |
+| `Package/Identity/Publisher` | `CN=E6ED6F6D-88CB-42AC-BED3-B0FA24EC28DD` |
+| `Package/Properties/PublisherDisplayName` | `Morten Brudvik` |
+| **Store ID** | `9NJZ0KVVD5N2` — needed by `msstore publish` once the app is live |
+
+The ordering that made this a trap, kept because it applies again to any future rebuild:
 
 Partner Center assigns the real values **when the name is reserved**, and the package must already
 carry them when it is uploaded — a package with placeholders is rejected on identity mismatch. So the
@@ -29,7 +34,7 @@ order is:
 
 `build-msix.ps1` prints a warning while the placeholders are still there. Do not ignore it.
 
-## Three things missing from this repo
+## What is still missing
 
 These block a submission and none of them is Partner Center work:
 
@@ -37,7 +42,7 @@ These block a submission and none of them is Partner Center work:
 | --- | --- | --- |
 | **Privacy policy URL** | Store policy 10.5.1 makes one mandatory for desktop products *regardless of what is collected* | A publicly reachable page saying Loadstone collects and transmits nothing. This repo is **private**, so GitHub Pages will not serve from it as-is — either make a small public repo for the page, or host it anywhere with a stable URL |
 | ~~At least one screenshot~~ **done** | Every listing requires one | `docs/store/screenshots/01-general.png` and `02-shortcuts.png`, 1920×1080 PNG. Captured from the real app at 150% scaling. Note the window uses a Mica backdrop, so its tint carries a trace of the desktop wallpaper behind it — recapture over a plain wallpaper if a neutral tint is wanted |
-| **Identity values** | See the trap above | Only obtainable by reserving the name first |
+| ~~Identity values~~ **done** | See above | Reserved 2026-09-09; package rebuilt and verified |
 
 ## What to do in Partner Center
 
