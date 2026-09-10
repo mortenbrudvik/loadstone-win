@@ -1,4 +1,3 @@
-using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Loadstone.UI.Services;
@@ -14,34 +13,13 @@ namespace Loadstone.UI.Tests;
 /// </summary>
 public sealed class VersionConsistencyTests
 {
-    private static string RepoRoot
-    {
-        get
-        {
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Loadstone.slnx")))
-            {
-                dir = dir.Parent;
-            }
-
-            dir.ShouldNotBeNull("could not find the repository root above the test assembly");
-            return dir.FullName;
-        }
-    }
-
     private static string VersionInJson()
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot, "version.json")));
+        using var doc = JsonDocument.Parse(RepoFile.Text("version.json"));
         return doc.RootElement.GetProperty("version").GetString().ShouldNotBeNull();
     }
 
-    private static string Match(string relativePath, string pattern)
-    {
-        var text = File.ReadAllText(Path.Combine(RepoRoot, relativePath));
-        var match = Regex.Match(text, pattern);
-        match.Success.ShouldBeTrue($"{relativePath} did not match {pattern}");
-        return match.Groups[1].Value;
-    }
+    private static string Match(string relativePath, string pattern) => RepoFile.Match(relativePath, pattern);
 
     [Fact]
     public void VersionJson_IsThreePartAndDoesNotStartWithZero()

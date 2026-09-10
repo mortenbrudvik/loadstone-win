@@ -13,6 +13,7 @@ installer-output/
 *.appxbundle
 *.appxupload
 packaging/msix/staging/
+packaging/inno/staging/
 *.pfx
 *.cer
 *.p12
