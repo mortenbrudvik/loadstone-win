@@ -56,7 +56,7 @@ Send back both of these:
 - The installer log, if the problem was during install: press <kbd>Win</kbd>+<kbd>R</kbd>, paste
   `%TEMP%` and press Enter, and take the newest `Setup Log*.txt`.
 
-Please say which build you were running — search the app log for the line starting `launched:`,
+Please say which build you were running — search the app log for the line containing `launched:`,
 which names the version and the folder it started from.
 
 ## Uninstalling
@@ -71,6 +71,7 @@ Two things it deliberately leaves behind:
   folder yourself.
 - **Windows' own drag-to-edge snapping stays off** if you had Loadstone's drag snapping switched on,
   until you sign out and back in. Loadstone turns that Windows setting off while it is running, and
-  an uninstall does not get the chance to turn it back on. Signing out restores it — or, without
-  signing out, switch **Snap windows** off and back on under Settings → System → Multitasking; it
-  will already show as on, but toggling it forces Windows to re-apply the real setting.
+  an uninstall does not get the chance to turn it back on. Signing out and back in restores it.
+  Settings → System → Multitasking will show **Snap windows** as already on the whole time —
+  Loadstone changes the setting only for the current session, without changing what Windows has
+  recorded — so that switch will not tell you whether snapping is really on.

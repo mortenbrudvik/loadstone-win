@@ -115,14 +115,20 @@ and three things go wrong at once:
 `PrivilegesRequired=lowest` means Setup never *requests* elevation — but its manifest is `asInvoker`,
 so a tester can still force it by right-clicking Setup.exe and choosing "Run as administrator", or by
 launching it from an already-elevated terminal. Inno still installs in non-administrative mode, so
-the files and the HKCU entries land in the right place and nothing looks wrong; only the `[Run]`
-launch inherits the elevated token. The `[Run]` entry carries `runasoriginaluser` — it costs nothing
-to keep, since it is already Inno's default behaviour once `postinstall` is used — but it is not a
-guard against either route above. Inno's own documentation for the flag says it has no effect when
-Setup was itself launched elevated, which is exactly what both routes are: a right-click "Run as
-administrator", and a launch from an already-elevated process. Nothing in the script can recover the
-original token once Setup is elevated. The whole mitigation is `docs/beta-testing.md` telling the
-tester not to run Setup as administrator, and what to do if they already did.
+everything still lands in per-user locations and nothing looks wrong at install time. What breaks
+depends on whose token it is. If the tester elevated with their own administrator account, the
+install directory, the uninstall entry, HKCU and `%LOCALAPPDATA%` are all their own, and only the
+integrity level differs. If they elevated with a different administrator's credentials, every
+per-user destination is that account's instead: the install directory and the Start-menu entry at
+install time, and then the Run value, `settings.json` and the logs. The real user never sees any of
+it. Either way the `[Run]` launch inherits the elevated token. The `[Run]` entry carries
+`runasoriginaluser` — it costs nothing to keep, since it is already Inno's default behaviour once
+`postinstall` is used — but it is not a guard against either route above. Inno's own documentation
+for the flag says it has no effect when Setup was itself launched elevated, which is exactly what
+both routes are: a right-click "Run as administrator", and a launch from an already-elevated
+process. Nothing in the script can recover the original token once Setup is elevated. The whole
+mitigation is `docs/beta-testing.md` telling the tester not to run Setup as administrator, and what
+to do if they already did.
 
 ### 4.4 Architecture
 
