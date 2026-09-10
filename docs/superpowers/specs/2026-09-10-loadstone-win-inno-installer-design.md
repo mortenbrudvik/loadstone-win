@@ -131,17 +131,31 @@ the arm64 non-goal: no arm64 binary is built, `Directory.Build.props` stays x64-
 arm64 test coverage. It is a decision to let an arm64 tester install the x64 build rather than be
 refused, accepting that the result is untested. `x64os` would exclude them.
 
-`ArchitecturesInstallIn64BitMode` governs where `{autopf}` and 64-bit registry views resolve, but for
-this per-user install (`PrivilegesRequired=lowest`) it is not load-bearing for upgrade identity the
-way `AppId` is: `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall` is not WOW64-redirected —
-verified on this machine: `reg query ... /reg:32` and `/reg:64` return identical listings — so Setup
-writes the same `{AppId}_is1` key regardless of this directive's value. Changing or removing it does
-not fork installs the way switching to an all-users install would; `AppId` alone decides "same
-application" here. The directive still must not change casually — getting it wrong misresolves paths
-and registry views — just not for the forking reason.
+Of the two, `ArchitecturesAllowed` is the one with a real consequence: narrow it to `x64` and an
+arm64 tester running under emulation is silently excluded, rather than refused with an explanation —
+Inno simply does not offer Setup to an architecture outside the allowed set. It does not fork upgrade
+identity the way `AppId` does (5.1); it changes who Setup will run for at all.
 
-That plain `HKCU` root is also why the downgrade guard (5.4) and the `Run` key of 6.1 need no
-`HKCU64` variant: they read and write the same key regardless of the install's bit mode.
+`ArchitecturesInstallIn64BitMode` has almost no functional effect on this installer, and it does not
+fork upgrade identity either. Two things determine what it would otherwise change, and this script is
+insensitive to it on both:
+
+- `{autopf}`: 4.1 already establishes that `PrivilegesRequired=lowest` with no override makes this
+  install permanently non-administrative, so `{autopf}` always resolves to `{userpf}` — Inno maps
+  both `{autopf32}` and `{autopf64}` to `{userpf}` in non-administrative mode, so the architecture
+  directive cannot move it.
+- Registry views: the script's only registry writes are plain `HKCU` — the Run value of 6.1 and
+  Inno's own uninstall key (5.1) — and `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall` is
+  not WOW64-redirected, verified on this machine: `reg query ... /reg:32` and `/reg:64` return
+  identical listings. Neither is `HKCU\...\Run`. There is no registry view left to fork, which is
+  also why the downgrade guard (5.4) needs no `HKCU64` variant.
+
+The only install-mode-sensitive constant the script uses at all is `{sys}`, twice, both times for
+`taskkill.exe` (`packaging/inno/Loadstone.iss` lines 93 and 151) — a binary that exists in both
+System32 and SysWOW64, so it resolves to a working path either way. `ArchitecturesInstallIn64BitMode`
+is set because the shipped payload is x64, not because leaving it unset or wrong would break
+anything observable here; there is no dramatic consequence to changing it, unlike `AppId` or
+`ArchitecturesAllowed`.
 
 ## 5. Upgrade and the running app
 
@@ -594,8 +608,10 @@ the same criterion as the existing `AppxManifest_StartupTaskId_MatchesTheConstan
   `PrivilegesRequiredOverridesAllowed` is absent, `ArchitecturesAllowed=x64compatible` and
   `ArchitecturesInstallIn64BitMode=x64compatible` are present, and the `AppIdGuid` define holds
   `{2A69E8C0-2128-4C8B-9B81-580FEE25CCED}`. `PrivilegesRequired` and `AppId` fork upgrade identity or
-  the install scope if changed, with nothing else to catch it; the architecture directives do not
-  fork identity for this per-user install (4.4), but must not change casually either (4.1, 4.4, 5.1).
+  the install scope if changed, with nothing else to catch it. Neither architecture directive forks
+  identity either, but `ArchitecturesAllowed` narrowed to `x64` would silently exclude an arm64
+  tester running under emulation; `ArchitecturesInstallIn64BitMode` has almost no effect on this
+  per-user install (4.4) and is pinned only because it is set to match the x64 payload.
 
 ## 11. Documentation
 

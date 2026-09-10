@@ -99,11 +99,9 @@ public sealed class InnoScriptTests
     /// <summary>
     /// An all-users mode misfiles the HKCU Run value and the %LOCALAPPDATA% data, and a changed
     /// AppId makes the next Setup install a second copy beside the first instead of upgrading it.
-    /// The architecture directives must not change casually either, but not for that reason: HKCU's
-    /// Uninstall key is not WOW64-redirected, so this per-user install resolves to the same
-    /// <c>{AppId}_is1</c> key regardless of bit mode. ArchitecturesAllowed is what lets an Arm64
-    /// tester install under emulation; ArchitecturesInstallIn64BitMode governs how <c>{autopf}</c>
-    /// and the registry views resolve.
+    /// ArchitecturesAllowed matters too: narrowed to x64 it would silently exclude an arm64 tester
+    /// running under emulation. ArchitecturesInstallIn64BitMode has almost no effect on this
+    /// per-user install and is pinned only because it is set to match the x64 payload.
     /// </summary>
     [Fact]
     public void TheInstall_StaysPerUser_AndKeepsItsIdentity()
