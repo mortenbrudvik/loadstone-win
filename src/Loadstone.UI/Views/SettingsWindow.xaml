@@ -100,11 +100,12 @@
         <DockPanel DataContext="{Binding Shortcuts}" Margin="0,12,0,0">
           <ui:Button
               DockPanel.Dock="Bottom"
-              Margin="0,12,0,0"
+              Margin="0,12,16,0"
               HorizontalAlignment="Right"
               Content="Restore defaults"
               Command="{Binding RestoreDefaultsCommand}" />
-          <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <!-- WPF-UI paints the bar over the content (ColumnSpan=2, 14px). Keep the recorders out of that strip. -->
+          <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
             <ItemsControl ItemsSource="{Binding Groups}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:ShortcutGroupViewModel}">
