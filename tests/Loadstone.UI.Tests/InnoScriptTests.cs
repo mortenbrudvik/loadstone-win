@@ -61,7 +61,9 @@ public sealed class InnoScriptTests
     /// <summary>
     /// deletevalue fires at install time and would switch off the tester's launch-at-login on every
     /// upgrade; uninsdeletekeyifempty would delete the shared HKCU Run key for any user with no
-    /// other startup entries. Both are one word away from the flags that are correct.
+    /// other startup entries. deletekey and uninsdeletekey are strictly more destructive still - they
+    /// delete the entire shared Run key outright, at install and uninstall time respectively - and
+    /// each is one word away from a flag that is correct.
     /// </summary>
     [Fact]
     public void TheLoginItem_IsDeletedOnUninstallOnly()
@@ -73,14 +75,17 @@ public sealed class InnoScriptTests
 
         // The negatives are file-wide, not just this entry: a second [Registry] line added later is
         // the plausible way the trap comes back, and it would be invisible to a check on the first
-        // match alone. Scoped to Flags: values rather than the whole file because the script names
-        // both words in prose to explain why they are absent.
-        var everyFlag = Regex.Matches(RepoFile.Text(Script), @"Flags: ([^\r\n]+)")
+        // match alone. Line continuations (a trailing backslash) are joined first so a flags list
+        // wrapped across lines is not silently skipped.
+        var joined = Regex.Replace(RepoFile.Text(Script), @"\\\r?\n[ \t]*", " ");
+        var everyFlag = Regex.Matches(joined, @"Flags: ([^\r\n]+)")
             .SelectMany(m => m.Groups[1].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             .ToArray();
 
         everyFlag.ShouldNotContain("deletevalue");
         everyFlag.ShouldNotContain("uninsdeletekeyifempty");
+        everyFlag.ShouldNotContain("deletekey");
+        everyFlag.ShouldNotContain("uninsdeletekey");
     }
 
     /// <summary>
@@ -118,5 +123,8 @@ public sealed class InnoScriptTests
         Directive(text, "ArchitecturesInstallIn64BitMode").ShouldBe("x64compatible");
         RepoFile.Match(Script, @"#define AppIdGuid ""(\{[^""]+\})""")
             .ShouldBe("{2A69E8C0-2128-4C8B-9B81-580FEE25CCED}");
+        // Pins that AppId= actually uses the define. {{#AppIdGuid} with the define left intact would
+        // pass every other assertion here while silently forking upgrade identity.
+        Directive(text, "AppId").ShouldBe("{{#AppIdGuid}");
     }
 }

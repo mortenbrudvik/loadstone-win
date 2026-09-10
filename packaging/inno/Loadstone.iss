@@ -5,6 +5,13 @@
   #error AppVersion must be passed with ISCC /DAppVersion=<version>
 #endif
 
+; #ifndef only catches a MISSING /D. An empty one (/DAppVersion=) still defines the macro, compiles,
+; and produces "Loadstone--Setup.exe" - and StrToVersion('') returns False, which the downgrade guard
+; treats as "allow", so it would silently disable itself on every machine. Fail the build instead.
+#if AppVersion == ""
+  #error AppVersion must not be empty; pass ISCC /DAppVersion=<version>
+#endif
+
 ; StrToVersion cannot parse a suffixed version and the downgrade guard treats a parse failure as
 ; "allow", so a suffix would silently disable it on every machine. Fail the build instead.
 #if (Pos("-", AppVersion) > 0) || (Pos("+", AppVersion) > 0) || (Pos(" ", AppVersion) > 0)
@@ -81,9 +88,12 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 
 [Run]
-; runasoriginaluser is the guard against a tester right-clicking Setup and running it as
-; administrator: without it the app inherits that token and misfiles everything (spec 4.3, "The
-; elevation hazard").
+; runasoriginaluser is harmless to keep - it is already Inno's default once postinstall is used -
+; but it is NOT a guard against a tester right-clicking Setup and choosing "Run as administrator",
+; or launching it from an already-elevated process: Inno's own documentation says the flag has no
+; effect in either case, so it cannot recover the original token once Setup itself is elevated. The
+; actual mitigation is docs/beta-testing.md telling testers not to run Setup as administrator
+; (spec 4.3, "The elevation hazard").
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; \
     Flags: nowait postinstall skipifsilent runasoriginaluser
 

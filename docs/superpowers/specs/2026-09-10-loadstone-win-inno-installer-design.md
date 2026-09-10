@@ -116,10 +116,13 @@ and three things go wrong at once:
 so a tester can still force it by right-clicking Setup.exe and choosing "Run as administrator", or by
 launching it from an already-elevated terminal. Inno still installs in non-administrative mode, so
 the files and the HKCU entries land in the right place and nothing looks wrong; only the `[Run]`
-launch inherits the elevated token. The `[Run]` entry therefore carries `runasoriginaluser`, which
-launches the app as the user who started Setup. It is a no-op when Setup is not elevated, so it costs
-nothing and closes the only door left open. `docs/beta-testing.md` says not to run Setup as
-administrator, and what to do if you already did.
+launch inherits the elevated token. The `[Run]` entry carries `runasoriginaluser` — it costs nothing
+to keep, since it is already Inno's default behaviour once `postinstall` is used — but it is not a
+guard against either route above. Inno's own documentation for the flag says it has no effect when
+Setup was itself launched elevated, which is exactly what both routes are: a right-click "Run as
+administrator", and a launch from an already-elevated process. Nothing in the script can recover the
+original token once Setup is elevated. The whole mitigation is `docs/beta-testing.md` telling the
+tester not to run Setup as administrator, and what to do if they already did.
 
 ### 4.4 Architecture
 

@@ -7,9 +7,10 @@ the Microsoft Store.
 ## Before you install
 
 **Do not run Setup as administrator.** Just double-click it. Right-clicking and choosing "Run as
-administrator" makes Loadstone start with administrator rights, and then it saves your settings in
-the wrong place and refuses to start normally afterwards. If you have already done it, quit
-Loadstone from its tray icon and start it again from the Start menu.
+administrator" makes Loadstone refuse to start normally afterwards, and if you approve the prompt as
+a different administrator account, it also saves your settings under that account instead of yours.
+If you have already done it, quit Loadstone from its tray icon and start it again from the Start
+menu.
 
 **If you already have Loadstone from the Microsoft Store**, uninstall it first, or at least turn off
 its "Launch at login". Only one Loadstone can run at a time, and with two of them set to start at
@@ -55,8 +56,8 @@ Send back both of these:
 - The installer log, if the problem was during install: press <kbd>Win</kbd>+<kbd>R</kbd>, paste
   `%TEMP%` and press Enter, and take the newest `Setup Log*.txt`.
 
-Please say which build you were running — the first line of the app log names the version and the
-folder it started from.
+Please say which build you were running — search the app log for the line starting `launched:`,
+which names the version and the folder it started from.
 
 ## Uninstalling
 
@@ -70,5 +71,6 @@ Two things it deliberately leaves behind:
   folder yourself.
 - **Windows' own drag-to-edge snapping stays off** if you had Loadstone's drag snapping switched on,
   until you sign out and back in. Loadstone turns that Windows setting off while it is running, and
-  an uninstall does not get the chance to turn it back on. Signing out restores it — or turn it back
-  on yourself under Settings → System → Multitasking → **Snap windows**.
+  an uninstall does not get the chance to turn it back on. Signing out restores it — or, without
+  signing out, switch **Snap windows** off and back on under Settings → System → Multitasking; it
+  will already show as on, but toggling it forces Windows to re-apply the real setting.

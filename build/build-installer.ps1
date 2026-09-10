@@ -11,6 +11,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $version = (Get-Content (Join-Path $root 'version.json') -Raw | ConvertFrom-Json).version
+# An empty $version would interpolate into "Loadstone--Setup.exe" below and still satisfy the
+# postcondition that checks the file exists, so catch it here rather than let the .iss's own guard
+# (packaging/inno/Loadstone.iss) be the only thing standing between an empty version.json and a
+# silently-broken downgrade guard.
+if ([string]::IsNullOrWhiteSpace($version)) { throw "version.json has no 'version' value" }
 $stage = Join-Path $root 'packaging/inno/staging'
 $output = Join-Path $root 'installer-output'
 $issPath = Join-Path $root 'packaging/inno/Loadstone.iss'
