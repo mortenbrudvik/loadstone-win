@@ -733,3 +733,53 @@ To the **2026-09-08 design**:
   losing instance makes the winner open its Settings window (13).
 - **14 Risks.** The Inno channel is no longer only a fallback for a rejected `runFullTrust`
   justification; it exists and is in use for beta testing.
+
+## 15. Acceptance walk results (2026-09-10, Windows 11 25H2 build 26200)
+
+Run against `Loadstone-1.0.0-Setup.exe` and a bumped `Loadstone-1.0.1-Setup.exe`, driven from scripts:
+the Inno wizard through Win32 `BM_CLICK`, the tray menu and the Settings toggles through UI Automation
+and synthetic input. Every registry path was read back rather than assumed, per 4.1.
+
+- **Install** — pass. No UAC prompt. The wizard opened straight on Ready to Install, confirming
+  `DisableDirPage` and `DisableProgramGroupPage`. `InstallLocation` read back as the per-user Programs
+  folder; Start-menu entry present; the `[Run]` entry fired and Loadstone started from the installed
+  path; the Settings window opened by itself; the tray icon appeared in the hidden-icon overflow.
+  Setup created no Run value, which is `dontcreatekey` behaving (6.1).
+- **Attribution (10.1)** — pass. The launch line reads
+  `launched: version 1.0.0.0 path=<installed exe> packaged=False dragSnapping=False ...`, so a beta
+  bug report names both the channel and the executable.
+- **Login item (6.1)** — pass. Turning Launch at login on wrote the Run value as the quoted *installed*
+  exe path. The check is on the value's data, not its existence, because a from-source run leaves a
+  value pointing into a `bin\` tree that the app will not repoint.
+- **Upgrade over a running app (5.2)** — pass, and click-free. The 1.0.1 wizard went Ready to Install →
+  Install → Finish with no Preparing to Install page at all, which is `PrepareToInstall`'s taskkill
+  running before Setup queries Restart Manager. Same `InstallLocation`, exactly **one** uninstall entry
+  (so `AppId` identity held and it upgraded rather than installing beside itself), a new pid, and the
+  Run value survived untouched.
+- **Park and recover across the hard kill (5.3)** — pass, the chain end to end. With drag snapping on,
+  both flags read False and the marker parked `{"DockMoving": true, "SnapSizing": true}`. After the
+  forced close and relaunch the log read `version 1.0.1.0 ... dragSnapping=True monitoring=True
+  nativeSnapSuppressed=True` — recovered, then re-suppressed. Turning drag snapping off restored both
+  flags to True and cleared the marker.
+- **Downgrade guard (5.4)** — pass. The 1.0.0 Setup over 1.0.1 exited **1** (`ecInitializationError`,
+  which is the code 5.2 records, not 2), changed nothing, and wrote to `%TEMP%\Setup Log*.txt` with no
+  `/LOG` passed: `Downgrade blocked: installed 1.0.1 is newer than 1.0.0.` then
+  `InitializeSetup returned False; aborting.`
+- **Uninstall (6.1, 6.2, 6.3)** — pass. `[UninstallRun]`'s taskkill closed the app; files, Start-menu
+  entry and uninstall entry gone; **the HKCU Run value gone**; the shared `Run` key still present with
+  its other 16 values, which is `uninsdeletekeyifempty` correctly being absent;
+  `%LOCALAPPDATA%\Loadstone\` kept with `Logs`, `settings.json` and the marker.
+- **Session-scoped writes** — confirmed throughout. `HKCU\Control Panel\Desktop`'s `DockMoving` and
+  `SnapSizing` read `1` before, during and after suppression, so nothing was ever persisted. After the
+  uninstall the flags stayed off with no Loadstone left to restore them, exactly as 6.3 says.
+- **Single instance** — a second launch of the installed exe exited 0 without starting a new process
+  and opened Settings on the running one.
+- Suite after the walk: 453 total, 452 succeeded, 0 failed, 1 environment skip. The machine was
+  restored: flags back on, the pre-walk `%LOCALAPPDATA%\Loadstone\` renamed back, the version returned
+  to 1.0.0, and the pre-existing from-source Run value put back.
+
+One thing not explained: between turning Launch at login on and the upgrade step, the Run value was
+observed once to have disappeared while the app kept running and logged nothing. It did not recur —
+after a real click the value stayed put across repeated checks, and it survived the upgrade — so it is
+recorded here as an unexplained single observation rather than a defect. Worth a second look if a
+tester reports launch-at-login not sticking.
