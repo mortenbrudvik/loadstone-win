@@ -99,7 +99,7 @@ directory, so a read-only install location is safe but also buys nothing.
 
 `app.manifest` declares no `requestedExecutionLevel`, so Loadstone runs at whatever token it is
 given. If Setup is elevated and runs a plain `[Run]` entry, it hands its elevated token to the app,
-and three things go wrong at once:
+and up to three things go wrong at once:
 
 - `RegistryStartupRegistration` writes the Run value into the elevating account's HKCU, and
   `settings.json` and the logs land in that account's `%LOCALAPPDATA%` — so when that is a
@@ -370,6 +370,13 @@ Compiled as written on Inno Setup 6.7.3 during this design; the relative paths r
   #error AppVersion must be passed with ISCC /DAppVersion=<version>
 #endif
 
+; #ifndef only catches a MISSING /D. An empty one (/DAppVersion=) still defines the macro, compiles,
+; and produces "Loadstone--Setup.exe" - and StrToVersion('') returns False, which the downgrade guard
+; treats as "allow", so it would silently disable itself on every machine. Fail the build instead.
+#if AppVersion == ""
+  #error AppVersion must not be empty; pass ISCC /DAppVersion=<version>
+#endif
+
 ; StrToVersion cannot parse a suffixed version and the downgrade guard treats a parse failure as
 ; "allow", so a suffix would silently disable it on every machine. Fail the build instead.
 #if (Pos("-", AppVersion) > 0) || (Pos("+", AppVersion) > 0) || (Pos(" ", AppVersion) > 0)
@@ -398,7 +405,8 @@ AppSupportURL={#AppUrl}
 AppUpdatesURL={#AppUrl}
 VersionInfoVersion={#AppVersion}
 ; Per-user only. PrivilegesRequiredOverridesAllowed is deliberately absent: an all-users install
-; would misfile the HKCU Run value and the %LOCALAPPDATA% data this app depends on (spec 4.2 "Why per-user is the correct scope" and 4.3 "The elevation hazard").
+; would misfile the HKCU Run value and the %LOCALAPPDATA% data this app depends on (spec 4.2 "Why
+; per-user is the correct scope" and 4.3 "The elevation hazard").
 PrivilegesRequired=lowest
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
@@ -416,7 +424,8 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 ; Restart Manager is the backstop, and it does prompt. PrepareToInstall's taskkill runs before Setup
-; queries it and usually pre-empts the page entirely. AppMutex is deliberately not set; see spec 5.2, "Closing the running copy".
+; queries it and usually pre-empts the page entirely. AppMutex is deliberately not set; see spec 5.2,
+; "Closing the running copy".
 CloseApplications=force
 CloseApplicationsFilter=Loadstone.exe
 RestartApplications=no
@@ -433,7 +442,8 @@ Source: "staging\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs creat
 ; Loadstone writes this value itself when the user turns on Launch at login. Setup must never
 ; create or delete it at install time - only record the delete-on-uninstall action. Never add
 ; deletevalue (it fires at install time) or uninsdeletekeyifempty (it deletes the shared Run key).
-; ValueName must equal RegistryStartupRegistration.ValueName; a test pins it (spec 6.1 "The login item", 10.2 "InnoScriptTests").
+; ValueName must equal RegistryStartupRegistration.ValueName; a test pins it (spec 6.1 "The login
+; item", 10.2 "InnoScriptTests").
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; \
     ValueName: "Loadstone"; Flags: dontcreatekey uninsdeletevalue
 
@@ -443,8 +453,12 @@ Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 
 [Run]
-; runasoriginaluser is the guard against a tester right-clicking Setup and running it as
-; administrator: without it the app inherits that token and misfiles everything (spec 4.3, "The elevation hazard").
+; runasoriginaluser is harmless to keep - it is already Inno's default once postinstall is used -
+; but it is NOT a guard against a tester right-clicking Setup and choosing "Run as administrator",
+; or launching it from an already-elevated process: Inno's own documentation says the flag has no
+; effect in either case, so it cannot recover the original token once Setup itself is elevated. The
+; actual mitigation is docs/beta-testing.md telling testers not to run Setup as administrator
+; (spec 4.3, "The elevation hazard").
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; \
     Flags: nowait postinstall skipifsilent runasoriginaluser
 
@@ -500,9 +514,9 @@ end;
 
 { Runs before Setup queries Restart Manager, so it is what usually makes an upgrade click-free -
   and it is the only thing that can see a Loadstone running from outside the install directory,
-  which Restart Manager structurally cannot (spec 5.2, "Closing the running copy"). Sets Blocked when a live process survived
-  the attempt. Note: no braces in a Pascal Script comment - they do not nest, so an Inno constant
-  written out here would end the comment early. }
+  which Restart Manager structurally cannot (spec 5.2, "Closing the running copy"). Sets Blocked
+  when a live process survived the attempt. Note: no braces in a Pascal Script comment - they do
+  not nest, so an Inno constant written out here would end the comment early. }
 procedure KillRunningApp(var Blocked: Boolean);
 var
   ResultCode: Integer;
