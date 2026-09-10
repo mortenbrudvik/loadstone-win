@@ -97,9 +97,13 @@ public sealed class InnoScriptTests
     }
 
     /// <summary>
-    /// Each of these forks the install: an all-users mode misfiles the HKCU Run value and the
-    /// %LOCALAPPDATA% data, and a changed AppId or architecture mode makes the next Setup install a
-    /// second copy beside the first instead of upgrading it.
+    /// An all-users mode misfiles the HKCU Run value and the %LOCALAPPDATA% data, and a changed
+    /// AppId makes the next Setup install a second copy beside the first instead of upgrading it.
+    /// The architecture directives must not change casually either, but not for that reason: HKCU's
+    /// Uninstall key is not WOW64-redirected, so this per-user install resolves to the same
+    /// <c>{AppId}_is1</c> key regardless of bit mode. ArchitecturesAllowed is what lets an Arm64
+    /// tester install under emulation; ArchitecturesInstallIn64BitMode governs how <c>{autopf}</c>
+    /// and the registry views resolve.
     /// </summary>
     [Fact]
     public void TheInstall_StaysPerUser_AndKeepsItsIdentity()
@@ -112,6 +116,7 @@ public sealed class InnoScriptTests
         Directive(text, "PrivilegesRequired").ShouldBe("lowest");
         Regex.IsMatch(text, @"(?m)^PrivilegesRequiredOverridesAllowed=")
             .ShouldBeFalse("an all-users install must not even be offerable");
+        Directive(text, "ArchitecturesAllowed").ShouldBe("x64compatible");
         Directive(text, "ArchitecturesInstallIn64BitMode").ShouldBe("x64compatible");
         RepoFile.Match(Script, @"#define AppIdGuid ""(\{[^""]+\})""")
             .ShouldBe("{2A69E8C0-2128-4C8B-9B81-580FEE25CCED}");

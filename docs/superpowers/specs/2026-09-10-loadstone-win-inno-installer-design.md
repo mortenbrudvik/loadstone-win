@@ -131,15 +131,17 @@ the arm64 non-goal: no arm64 binary is built, `Directory.Build.props` stays x64-
 arm64 test coverage. It is a decision to let an arm64 tester install the x64 build rather than be
 refused, accepting that the result is untested. `x64os` would exclude them.
 
-`ArchitecturesInstallIn64BitMode` is load-bearing for upgrade identity, not only for path
-redirection: "same application" is `AppId` *and* administrative/non-administrative install mode *and*
-32-bit/64-bit install mode. Changing or removing that line later forks installs exactly as switching
-to an all-users install would.
+`ArchitecturesInstallIn64BitMode` governs where `{autopf}` and 64-bit registry views resolve, but for
+this per-user install (`PrivilegesRequired=lowest`) it is not load-bearing for upgrade identity the
+way `AppId` is: `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall` is not WOW64-redirected —
+verified on this machine: `reg query ... /reg:32` and `/reg:64` return identical listings — so Setup
+writes the same `{AppId}_is1` key regardless of this directive's value. Changing or removing it does
+not fork installs the way switching to an all-users install would; `AppId` alone decides "same
+application" here. The directive still must not change casually — getting it wrong misresolves paths
+and registry views — just not for the forking reason.
 
-That is about Inno's own uninstall bookkeeping, not about registry views. `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall`
-is not WOW64-redirected — verified on this machine: `reg query ... /reg:32` and `/reg:64` return
-identical listings — so the plain `HKCU` root in the downgrade guard (5.4) reads the same key Setup
-writes, and no `HKCU64` variant is needed. The same is true of the `Run` key of 6.1.
+That plain `HKCU` root is also why the downgrade guard (5.4) and the `Run` key of 6.1 need no
+`HKCU64` variant: they read and write the same key regardless of the install's bit mode.
 
 ## 5. Upgrade and the running app
 
@@ -589,10 +591,11 @@ the same criterion as the existing `AppxManifest_StartupTaskId_MatchesTheConstan
   agree with `<AssemblyName>` in `Loadstone.UI.csproj`. A rename would otherwise leave an installer
   that installs the right files, closes nothing before an upgrade, and kills nothing on uninstall.
 - **`Iss_StaysPerUserAndKeepsItsIdentity`** — `PrivilegesRequired=lowest` is present,
-  `PrivilegesRequiredOverridesAllowed` is absent, `ArchitecturesInstallIn64BitMode=x64compatible` is
-  present, and the `AppIdGuid` define holds `{2A69E8C0-2128-4C8B-9B81-580FEE25CCED}`. Each of these
-  forks upgrade identity or the install scope if changed, with nothing else to catch it (4.1, 4.4,
-  5.1).
+  `PrivilegesRequiredOverridesAllowed` is absent, `ArchitecturesAllowed=x64compatible` and
+  `ArchitecturesInstallIn64BitMode=x64compatible` are present, and the `AppIdGuid` define holds
+  `{2A69E8C0-2128-4C8B-9B81-580FEE25CCED}`. `PrivilegesRequired` and `AppId` fork upgrade identity or
+  the install scope if changed, with nothing else to catch it; the architecture directives do not
+  fork identity for this per-user install (4.4), but must not change casually either (4.1, 4.4, 5.1).
 
 ## 11. Documentation
 
@@ -664,7 +667,7 @@ is acceptable here because it is the thing being verified, and step 6 is what re
 | --- | --- |
 | SmartScreen warns on every download of an unsigned Setup.exe | Documented for testers (11) rather than solved. A certificate is the only real fix and is a non-goal |
 | A tester has both the Store package and this installer | Both write their own login item — the Store copy through `windows.startupTask`, this one through the HKCU Run value — and only one can hold the single-instance mutex. The loser signals `Loadstone-ShowSettings` and exits, so the winner opens its Settings window: at every sign-in while both login items are on, and whenever the tester launches the copy that loses, which makes Setup's own `[Run]` step look like it did nothing. `docs/beta-testing.md` says to uninstall the other copy, or at least turn off its launch-at-login, before installing |
-| `AppId` changed later by accident | Defined once, in the file that is the record, with a comment saying never to change it, and pinned by a test (10.2). Section 4.4 notes the architecture directives fork identity the same way |
+| `AppId` changed later by accident | Defined once, in the file that is the record, with a comment saying never to change it, and pinned by a test (10.2). Section 4.4 explains why the architecture directives, unlike `AppId`, do not fork identity for this per-user install |
 | A hard close loses the snap-flag restore | Session-scoped writes plus the marker already cover it (5.3), and verification step 4 exercises the chain. Where there is no relaunch — `/SILENT`, an unticked checkbox, or uninstall — the flags stay parked until the next launch or sign-out (6.3) |
 | An elevated Loadstone cannot be closed by Setup | `PrepareToInstall` stops the install with a readable message instead of letting `[Files]` hit a locked file (5.2). On uninstall there is no equivalent: the directory is left behind |
 | `iscc` not installed on a contributor's machine | The build script throws, naming every path it searched and the winget command that fixes it |
