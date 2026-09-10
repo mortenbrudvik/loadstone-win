@@ -38,6 +38,10 @@ public sealed class AppModule : Module
             .As<INativeSnapMarker>().SingleInstance();
         builder.RegisterType<NativeSnap>().AsSelf().SingleInstance();
 
+        // Registered as well as consulted: the launch log line names the channel, and resolving the
+        // same instance keeps one answer to the question rather than a second probe in App.
+        builder.RegisterInstance(_identity).As<IPackageIdentity>().SingleInstance();
+
         // The one place package identity changes what the app does. Inside a package the Run key
         // write lands in a private hive that Explorer never reads and still reports success, so the
         // wrong choice here is invisible at run time.

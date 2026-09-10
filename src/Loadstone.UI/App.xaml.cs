@@ -116,8 +116,10 @@ public partial class App : Application
         // is already there and not empty, so only a change in it proves this run's own line landed.
         var logLengthBeforeLaunch = LoggingSetup.CurrentLogLength();
         _logger.LogInformation(
-            "launched: version {Version} dragSnapping={Drag} monitoring={Monitoring} nativeSnapSuppressed={Suppressed}",
+            "launched: version {Version} path={Path} packaged={Packaged} dragSnapping={Drag} monitoring={Monitoring} nativeSnapSuppressed={Suppressed}",
             typeof(App).Assembly.GetName().Version,
+            Environment.ProcessPath,
+            services.GetRequiredService<IPackageIdentity>().IsPackaged,
             settings.Current.DragSnappingEnabled,
             drag.IsMonitoring,
             nativeSnap.IsSuppressing);

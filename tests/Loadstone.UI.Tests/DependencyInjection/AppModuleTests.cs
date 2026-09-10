@@ -35,4 +35,23 @@ public sealed class AppModuleTests
 
         container.Resolve<IStartupRegistration>().ShouldBeOfType(expected);
     }
+
+    /// <summary>
+    /// The probe is registered, not just consulted: the launch log names the channel, and a second
+    /// <c>new PackageIdentity()</c> in App would put a second answer to the same question in the app.
+    /// </summary>
+    [Fact]
+    public void Load_RegistersThePackageIdentityProbe_SoTheLaunchLineCanNameTheChannel()
+    {
+        var identity = Substitute.For<IPackageIdentity>();
+        identity.IsPackaged.Returns(true);
+
+        var builder = new ContainerBuilder();
+        builder.RegisterModule(new AppModule(identity));
+        builder.RegisterGeneric(typeof(NullLogger<>)).As(typeof(ILogger<>)).SingleInstance();
+
+        using var container = builder.Build();
+
+        container.Resolve<IPackageIdentity>().ShouldBeSameAs(identity);
+    }
 }
