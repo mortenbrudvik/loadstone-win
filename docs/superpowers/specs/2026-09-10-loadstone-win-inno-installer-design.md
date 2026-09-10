@@ -359,8 +359,7 @@ silently rewrites source files is a worse failure mode than a red test.
 
 ## 8. `packaging/inno/Loadstone.iss`
 
-Compiled as written on Inno Setup 6.7.3 during this design; the relative paths resolve against the
-`.iss` file's own directory, which is what makes `..\..\` correct.
+This block is the shipped `packaging/inno/Loadstone.iss`, verbatim.
 
 ```
 ; Loadstone installer. Inno Setup 6.3+ (ArchitecturesAllowed=x64compatible).
