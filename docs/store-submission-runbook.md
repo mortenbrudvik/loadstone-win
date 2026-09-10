@@ -30,7 +30,7 @@ order is:
    ```powershell
    & 'C:\Program Files\PowerShell\7\pwsh.exe' -File C:\code\projects\loadstone-win\build\build-msix.ps1
    ```
-4. *Then* upload `C:\code\projects\loadstone-win\installer-output\Loadstone-1.0.0-x64.msix`.
+4. *Then* upload `installer-output\Loadstone-<version>-x64.msix`.
 
 `build-msix.ps1` prints a warning while the placeholders are still there. Do not ignore it.
 
@@ -77,18 +77,20 @@ Bring these back before doing anything else. Steps 3 onward need the rebuilt pac
 **Packages.** Upload:
 
 ```
-C:\code\projects\loadstone-win\installer-output\Loadstone-1.0.0-x64.msix
+installer-output\Loadstone-<version>-x64.msix
 ```
 
-~83 MB (83,328,183 bytes). The path does not change between builds — `build-msix.ps1` overwrites it,
-so **the file sitting there right now is the placeholder build**. Upload only the one rebuilt *after*
-the manifest was updated with the real identity values.
+For a given version, `build-msix.ps1` overwrites the same file, so **the file sitting there right now
+is the placeholder build** until it is rebuilt — a version bump moves the filename instead of
+overwriting it. Upload only the one rebuilt *after* the manifest was updated with the real identity
+values.
 
 To be certain which build is on disk, check the manifest inside it before uploading:
 
 ```powershell
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$z = [System.IO.Compression.ZipFile]::OpenRead('C:\code\projects\loadstone-win\installer-output\Loadstone-1.0.0-x64.msix')
+$version = (Get-Content C:\code\projects\loadstone-win\version.json -Raw | ConvertFrom-Json).version
+$z = [System.IO.Compression.ZipFile]::OpenRead("C:\code\projects\loadstone-win\installer-output\Loadstone-$version-x64.msix")
 $e = $z.GetEntry('AppxManifest.xml')
 $r = New-Object System.IO.StreamReader($e.Open())
 if ($r.ReadToEnd() -match 'PLACEHOLDER') { 'PLACEHOLDER BUILD - do not upload' } else { 'identity set - safe to upload' }
@@ -96,7 +98,9 @@ $r.Dispose(); $z.Dispose()
 ```
 
 Note that `installer-output/` is gitignored, so this file exists only on the build machine — it is
-not in the repository and not on GitHub.
+also where `build/build-installer.ps1` writes the beta `Loadstone-<version>-Setup.exe`, so expect
+both channels' artifacts side by side. Take the version from `version.json` rather than assuming
+1.0.0; a beta bump moves the filename.
 
 The package is **unsigned on purpose**. The Store re-signs it. Do not sign it, and do not accept any
 prompt to.

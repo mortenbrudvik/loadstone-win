@@ -77,6 +77,12 @@ The edge zones are 16 px deep at 100% scaling and extend the same distance past 
 
 Loadstone is meant to be installed from the Microsoft Store; no listing is live yet. Once it is, the Store installs it for the current user, no administrator rights needed, onto Windows 10 20H2 (build 19041) or later, x64 — the package manifest declares that floor directly (`TargetDeviceFamily MinVersion="10.0.19041.0"`), not the `net10.0-windows10.0.26100.0` target framework, which only sets the baseline the platform-compatibility analyzer checks against and is not itself a version floor. Nothing in the app calls an API newer than Windows 10. Development and testing have all been on Windows 11, so Windows 10 is declared rather than verified.
 
+**Beta builds.** Before the Store listing is live, Loadstone is handed out as a `Setup.exe` built
+from this repository. It installs for the current user with no administrator rights, onto the same
+Windows floor the Store package declares (build 19041 or later, x64). It is unsigned, so SmartScreen
+warns on first run — see [docs/beta-testing.md](docs/beta-testing.md), which is the page to give a
+tester along with the installer.
+
 Optional: **Settings → Launch at login**.
 
 ### Build from source
@@ -89,6 +95,16 @@ cd loadstone-win
 dotnet build Loadstone.slnx
 dotnet run --project src/Loadstone.UI
 ```
+
+To build the beta installer you also need [Inno Setup](https://jrsoftware.org/isinfo.php) 6.3 or
+newer (`winget install --id JRSoftware.InnoSetup`):
+
+```powershell
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -File build/build-installer.ps1
+```
+
+It writes `installer-output/Loadstone-<version>-Setup.exe`. The installer is unsigned; signing needs
+a purchased certificate and is not planned for the beta channel.
 
 ## Troubleshooting
 
