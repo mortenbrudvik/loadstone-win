@@ -9,8 +9,10 @@ the Microsoft Store.
 **Do not run Setup as administrator.** Just double-click it. Right-clicking and choosing "Run as
 administrator" makes Loadstone refuse to start normally afterwards, and if you approve the prompt as
 a different administrator account, it also saves your settings under that account instead of yours.
-If you have already done it, quit Loadstone from its tray icon and start it again from the Start
-menu.
+If you have already done it, quit Loadstone from its tray icon. If the prompt only asked you to
+click Yes, start it again from the Start menu. If it asked for someone else's password, Loadstone
+was installed under that account, so there is nothing in your Start menu to start — double-click
+Setup and install it again.
 
 **If you already have Loadstone from the Microsoft Store**, uninstall it first, or at least turn off
 its "Launch at login". Only one Loadstone can run at a time, and with two of them set to start at

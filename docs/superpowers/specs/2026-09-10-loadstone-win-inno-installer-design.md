@@ -95,15 +95,16 @@ Every write the app makes is per-user: the Run value under HKCU
 loose, as the 2026-09-08 MSIX spike established. Nothing is read from or written to the app's own
 directory, so a read-only install location is safe but also buys nothing.
 
-### 4.3 The elevation hazard, and the one flag that guards it
+### 4.3 The elevation hazard
 
 `app.manifest` declares no `requestedExecutionLevel`, so Loadstone runs at whatever token it is
 given. If Setup is elevated and runs a plain `[Run]` entry, it hands its elevated token to the app,
 and three things go wrong at once:
 
 - `RegistryStartupRegistration` writes the Run value into the elevating account's HKCU, and
-  `settings.json` and the logs land in that account's `%LOCALAPPDATA%` — so the first-run drag-snap
-  consent and the launch-at-login choice are invisible to the real user.
+  `settings.json` and the logs land in that account's `%LOCALAPPDATA%` — so when that is a
+  different administrator's account, the first-run drag-snap consent and the launch-at-login choice
+  are invisible to the real user.
 - The single-instance mutex and event are created at high integrity. The user's next ordinary launch
   — from the Start Menu, or from the Run value at logon — fails the guarded handshake with
   `UnauthorizedAccessException`, is swallowed by the blanket `catch` around it (`App.xaml.cs:287`),

@@ -120,7 +120,7 @@ Tray → Loadstone → **Loadstone Help** opens <https://mortenbrudvik.github.io
 
 **Next / previous display beeps.** Only one display is attached.
 
-**Windows' own edge snapping is off after Loadstone crashed or was killed.** Loadstone turns it off while its drag snapping is on and back on when it quits normally; after an unclean exit, simply launching Loadstone again restores it. To put it back by hand, use Settings → System → Multitasking → Snap windows (`ms-settings:multitasking`).
+**Windows' own edge snapping is off after Loadstone crashed or was killed.** Loadstone turns it off while its drag snapping is on and back on when it quits normally; after an unclean exit, simply launching Loadstone again restores it. Signing out and back in restores it too. Settings → System → Multitasking is no help either way: Loadstone changes the setting only for the current session, so that page shows **Snap windows** as on whether or not snapping is really working.
 
 **Launch at login is on but Loadstone does not start.** Task Manager → Startup apps may have it disabled; Settings shows "Disabled in Task Manager" with a button to open that page.
 
