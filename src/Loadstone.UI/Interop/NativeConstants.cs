@@ -75,6 +75,11 @@ internal static class NativeConstants
     // MessageBeep
     public const uint MB_OK = 0x0000;
 
+    // GetSystemMetrics. The shell draws a notification icon at the small-icon size, not the large one.
+    public const int SM_CXICON = 11;
+    public const int SM_CXSMICON = 49;
+    public const int SM_CYSMICON = 50;
+
     // Package identity. GetCurrentPackageFullName answers with an error code rather than a BOOL:
     // this one means the process has no package, anything else (including ERROR_INSUFFICIENT_BUFFER
     // from a zero-length buffer) means it has one.

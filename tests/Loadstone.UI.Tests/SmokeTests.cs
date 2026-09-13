@@ -59,12 +59,12 @@ public class SmokeTests
 
         using var container = builder.Build();
 
-        // The two the harness cannot build: TrayController's constructor puts a real icon in the
-        // user's tray and hooks the static SystemEvents, and SettingsWindow needs the dictionaries
-        // App.xaml merges at application level. SettingsWindowTests supplies those and shows the
-        // real window. TrayController has no test of its own, so skipping it here is a known gap,
-        // not a deferral to coverage that exists: a fault in its constructor still reaches launch.
-        var cannotBeBuiltHere = new[] { typeof(TrayController), typeof(SettingsWindow) };
+        // The one the harness cannot build: SettingsWindow needs the dictionaries App.xaml merges at
+        // application level, and SettingsWindowTests supplies those and shows the real window.
+        // TrayController is resolved here like everything else: its constructor builds the menu and
+        // the icon object, and only Start() - which nothing here calls - puts the icon in the user's
+        // tray and hooks the static SystemEvents.
+        var cannotBeBuiltHere = new[] { typeof(SettingsWindow) };
 
         foreach (var serviceType in container.ComponentRegistry.Registrations
                      .SelectMany(registration => registration.Services)

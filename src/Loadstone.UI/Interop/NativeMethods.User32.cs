@@ -107,6 +107,10 @@ internal static partial class NativeMethods
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool MessageBeep(uint uType);
 
+        // No SetLastError: GetSystemMetrics returns 0 for an unknown index and sets no error.
+        [LibraryImport("user32.dll")]
+        internal static partial int GetSystemMetrics(int nIndex);
+
         [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
         internal static partial int ToUnicodeEx(uint wVirtKey, uint wScanCode, [In] byte[] lpKeyState, [Out] char[] pwszBuff, int cchBuff, uint wFlags, nint dwhkl);
 

@@ -100,7 +100,7 @@ public partial class App : Application
         // what an unclean exit left off. It is the run where consent is already given that needs this
         // order.
         nativeSnap.Follow();
-        services.GetRequiredService<TrayController>();
+        services.GetRequiredService<TrayController>().Start();
         services.GetRequiredService<HotkeyCenter>().Start();
         var drag = services.GetRequiredService<DragSnapMonitor>();
         drag.Start();
