@@ -44,6 +44,16 @@ public sealed class NativeSnap
     private bool _following;
     private bool _dragSnapping;
 
+    /// <summary>
+    /// Every entry point takes this. The hot path never contends - every production caller is on the
+    /// UI thread - but the crash path is not: App restores from the faulting thread when the
+    /// dispatcher cannot be reached in time, and this is what keeps that restore from interleaving
+    /// with a Changed handler still running on the UI thread. Reentrant by design, because
+    /// <see cref="Suppress"/> clears the legacy marker through <see cref="ISettingsService.Update"/>,
+    /// whose Changed reaches <see cref="OnSettingsChanged"/> on the same thread.
+    /// </summary>
+    private readonly Lock _lock = new();
+
     public NativeSnap(
         INativeSnapFlags native,
         INativeSnapMarker marker,
@@ -75,39 +85,48 @@ public sealed class NativeSnap
     /// </remarks>
     public void Follow()
     {
-        if (_following)
+        lock (_lock)
         {
-            return;
-        }
+            if (_following)
+            {
+                return;
+            }
 
-        _following = true;
-        _dragSnapping = _settings.Current.DragSnappingEnabled;
-        Apply(_dragSnapping);
-        _settings.Changed += OnSettingsChanged;
+            _following = true;
+            _dragSnapping = _settings.Current.DragSnappingEnabled;
+            Apply(_dragSnapping);
+            _settings.Changed += OnSettingsChanged;
+        }
     }
 
     /// <summary>Stops following the setting. Safe to call when not following.</summary>
     public void StopFollowing()
     {
-        if (!_following)
+        lock (_lock)
         {
-            return;
-        }
+            if (!_following)
+            {
+                return;
+            }
 
-        _following = false;
-        _settings.Changed -= OnSettingsChanged;
+            _following = false;
+            _settings.Changed -= OnSettingsChanged;
+        }
     }
 
     /// <summary>Suppresses Windows' edge snapping while Loadstone's drag snapping is on, restores it while off.</summary>
     public void Apply(bool dragSnappingEnabled)
     {
-        if (dragSnappingEnabled)
+        lock (_lock)
         {
-            Suppress();
-        }
-        else
-        {
-            Restore();
+            if (dragSnappingEnabled)
+            {
+                Suppress();
+            }
+            else
+            {
+                Restore();
+            }
         }
     }
 
@@ -121,73 +140,79 @@ public sealed class NativeSnap
     /// </remarks>
     public void Restore()
     {
-        var captured = _captured;
-        if (captured is null)
+        lock (_lock)
         {
-            return;
-        }
-
-        // Only the flags still holding Loadstone's false: an earlier partial restore put the rest back.
-        var unrestored = new Dictionary<NativeSnapFlag, bool>();
-        foreach (var (flag, value) in _unrestored ?? captured)
-        {
-            // The user can turn a flag back on in Windows Settings mid-run. It still holds the false
-            // Loadstone wrote only if they did not, so anything else is their choice, not ours to
-            // overwrite. An unreadable flag is restored: we cannot tell, and putting back what we
-            // took is the promise.
-            if (_native.Read(flag) is true)
+            var captured = _captured;
+            if (captured is null)
             {
-                _logger.LogInformation("leaving Windows edge snapping flag {Flag} alone; it was turned back on during the run", flag);
-                continue;
+                return;
             }
 
-            if (!_native.Write(flag, value))
+            // Only the flags still holding Loadstone's false: an earlier partial restore put the rest back.
+            var unrestored = new Dictionary<NativeSnapFlag, bool>();
+            foreach (var (flag, value) in _unrestored ?? captured)
             {
-                _logger.LogError("could not restore Windows edge snapping flag {Flag} to {Value}; keeping it parked for the next launch", flag, value);
-                unrestored[flag] = value;
-            }
-        }
+                // The user can turn a flag back on in Windows Settings mid-run. It still holds the false
+                // Loadstone wrote only if they did not, so anything else is their choice, not ours to
+                // overwrite. An unreadable flag is restored: we cannot tell, and putting back what we
+                // took is the promise.
+                if (_native.Read(flag) is true)
+                {
+                    _logger.LogInformation("leaving Windows edge snapping flag {Flag} alone; it was turned back on during the run", flag);
+                    continue;
+                }
 
-        if (unrestored.Count == 0)
-        {
-            if (!_marker.Write(null))
+                if (!_native.Write(flag, value))
+                {
+                    _logger.LogError("could not restore Windows edge snapping flag {Flag} to {Value}; keeping it parked for the next launch", flag, value);
+                    unrestored[flag] = value;
+                }
+            }
+
+            if (unrestored.Count == 0)
             {
-                // Nothing is suppressed any more either way, so this is the one place a failed marker
-                // write costs nothing: every flag is back at the value the stale marker holds for it,
-                // so the next launch's recovery only ever writes back what is already there.
-                _logger.LogError("the crash marker could not be cleared; the next launch will recover from values that are already in place");
+                if (!_marker.Write(null))
+                {
+                    // Nothing is suppressed any more either way, so this is the one place a failed marker
+                    // write costs nothing: every flag is back at the value the stale marker holds for it,
+                    // so the next launch's recovery only ever writes back what is already there.
+                    _logger.LogError("the crash marker could not be cleared; the next launch will recover from values that are already in place");
+                }
+
+                _captured = null;
+                _unrestored = null;
+                return;
             }
 
-            _captured = null;
-            _unrestored = null;
-            return;
-        }
+            if (!_marker.Write(Park(unrestored)))
+            {
+                // The wider marker this narrowing would have replaced is still parked, which is safe -
+                // the extra flags are already back at the values in it - but _unrestored must not claim
+                // otherwise, or a later Restore would leave those extras parked with nothing to clear them.
+                _logger.LogError("the crash marker could not be narrowed to the flags that are still off; leaving the wider one parked");
+                _unrestored = null;
+                return;
+            }
 
-        if (!_marker.Write(Park(unrestored)))
-        {
-            // The wider marker this narrowing would have replaced is still parked, which is safe -
-            // the extra flags are already back at the values in it - but _unrestored must not claim
-            // otherwise, or a later Restore would leave those extras parked with nothing to clear them.
-            _logger.LogError("the crash marker could not be narrowed to the flags that are still off; leaving the wider one parked");
-            _unrestored = null;
-            return;
+            _unrestored = unrestored;
         }
-
-        _unrestored = unrestored;
     }
 
     private void OnSettingsChanged(object? sender, EventArgs e)
     {
-        var wanted = _settings.Current.DragSnappingEnabled;
-        if (wanted == _dragSnapping)
+        lock (_lock)
         {
-            return;
-        }
+            var wanted = _settings.Current.DragSnappingEnabled;
+            if (wanted == _dragSnapping)
+            {
+                return;
+            }
 
-        // Assign before applying, never after: a re-entrant call has to see the new value or the
-        // flags flip straight back.
-        _dragSnapping = wanted;
-        Apply(wanted);
+            // Assign before applying, never after: a re-entrant call has to see the new value or the
+            // flags flip straight back.
+            _dragSnapping = wanted;
+            Apply(wanted);
+        }
     }
 
     private void Suppress()

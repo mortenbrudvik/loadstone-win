@@ -10,7 +10,11 @@ namespace Loadstone.Core.Settings;
 /// </remarks>
 public interface IReadOnlyAppSettings
 {
-    /// <summary>Whether Loadstone snaps a window dragged to a screen edge. Opt-out: absent means on.</summary>
+    /// <summary>
+    /// Whether Loadstone snaps a window dragged to a screen edge. Opt-in: absent means off, because
+    /// turning it on is the user's consent to Loadstone switching off Windows' own edge snapping while
+    /// it runs (see <see cref="AppSettings.DragSnappingEnabled"/>).
+    /// </summary>
     bool DragSnappingEnabled { get; }
 
     /// <summary>

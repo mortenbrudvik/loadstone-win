@@ -13,10 +13,11 @@ using Rect = Loadstone.Core.Geometry.Rect;
 namespace Loadstone.UI.Input;
 
 /// <summary>
-/// The translucent rectangle, painted in the system accent colour, shown over the tile a drag will
-/// snap to - and re-read on every show, because Windows changes it mid-session. Borderless, click-through,
-/// never activated, topmost, placed with SetWindowPos in physical pixels because WPF's own placement
-/// is wrong on mixed-DPI desks. Only ever hidden, never closed.
+/// The translucent rectangle, painted in the system accent colour - or the High Contrast theme's
+/// highlight - shown over the tile a drag will snap to, and re-read on every show, because Windows
+/// changes both mid-session. Borderless, click-through, never activated, topmost, placed with
+/// SetWindowPos in physical pixels because WPF's own placement is wrong on mixed-DPI desks. Only ever
+/// hidden, never closed.
 /// </summary>
 internal sealed class SnapPreview : Window, ISnapPreview
 {
@@ -26,11 +27,23 @@ internal sealed class SnapPreview : Window, ISnapPreview
     private readonly ILogger<SnapPreview> _logger;
     private readonly Border _fill;
     private Color _accent;
+    private bool _highContrast;
     private bool _placementFailureLogged;
 
     public SnapPreview(ILogger<SnapPreview> logger)
     {
         _logger = logger;
+
+        // WPF makes the first Window constructed Application.MainWindow, and at startup that is this
+        // one. WPF-UI's ApplicationThemeManager.Apply dresses MainWindow with an opaque background and
+        // a Mica backdrop at every theme apply, which on builds before 22523 left this translucent
+        // window a solid slab. The slot is refused here and taken by SettingsWindow when it is built;
+        // Application.Current is null under the test host.
+        if (Application.Current is { } app && ReferenceEquals(app.MainWindow, this))
+        {
+            app.MainWindow = null;
+        }
+
         Title = "Loadstone snap preview";
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
@@ -53,7 +66,8 @@ internal sealed class SnapPreview : Window, ISnapPreview
             Margin = new Thickness(1),
         };
         _accent = SystemParameters.WindowGlassColor;
-        Paint(_accent);
+        _highContrast = SystemParameters.HighContrast;
+        Paint(_accent, _highContrast);
         Content = _fill;
 
         SourceInitialized += (_, _) => MakeClickThrough();
@@ -65,12 +79,15 @@ internal sealed class SnapPreview : Window, ISnapPreview
     {
         // Re-read the accent rather than keep the one this window was born with: Windows changes it
         // mid-session, from Settings or by following the wallpaper, and a preview stuck on the old
-        // colour until the next restart is the sort of thing nobody thinks to report.
+        // colour until the next restart is the sort of thing nobody thinks to report. High Contrast
+        // is a mid-session switch too (Left Alt + Left Shift + Print Screen).
         var accent = SystemParameters.WindowGlassColor;
-        if (accent != _accent)
+        var highContrast = SystemParameters.HighContrast;
+        if (accent != _accent || highContrast != _highContrast)
         {
             _accent = accent;
-            Paint(accent);
+            _highContrast = highContrast;
+            Paint(accent, highContrast);
         }
 
         var inset = frame.Inflate(-Inset, -Inset);
@@ -113,10 +130,28 @@ internal sealed class SnapPreview : Window, ISnapPreview
         }
     }
 
-    private void Paint(Color accent)
+    private void Paint(Color accent, bool highContrast)
     {
-        _fill.Background = new SolidColorBrush(Color.FromArgb(56, accent.R, accent.G, accent.B));   // 22 percent
-        _fill.BorderBrush = new SolidColorBrush(Color.FromArgb(217, accent.R, accent.G, accent.B)); // 85 percent
+        var (fill, border) = Colours(accent, highContrast);
+        _fill.Background = new SolidColorBrush(fill);
+        _fill.BorderBrush = new SolidColorBrush(border);
+    }
+
+    /// <summary>
+    /// The fill and border for the preview. Normally a 22 percent tint of the accent with an 85 percent
+    /// border, so the window beneath still reads through it. In High Contrast a 22 percent tint of the
+    /// DWM colour can be near-invisible on a black desktop, so the theme's own highlight colour is
+    /// used instead, with a solid border and a heavier fill.
+    /// </summary>
+    internal static (Color Fill, Color Border) Colours(Color accent, bool highContrast)
+    {
+        if (highContrast)
+        {
+            var highlight = SystemColors.HighlightColor;
+            return (Color.FromArgb(102, highlight.R, highlight.G, highlight.B), Color.FromArgb(255, highlight.R, highlight.G, highlight.B)); // 40 percent, solid
+        }
+
+        return (Color.FromArgb(56, accent.R, accent.G, accent.B), Color.FromArgb(217, accent.R, accent.G, accent.B)); // 22 percent, 85 percent
     }
 
     /// <summary>

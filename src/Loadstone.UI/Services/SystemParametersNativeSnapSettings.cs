@@ -36,8 +36,9 @@ internal sealed class SystemParametersNativeSnapSettings : INativeSnapFlags
     /// <summary>
     /// Session-scoped on purpose: SPIF_SENDCHANGE without SPIF_UPDATEINIFILE tells Explorer but writes
     /// nothing to the user profile, so a sign-out restores whatever the user really had. An MSIX
-    /// uninstall runs no application code and deletes the crash marker with the package data, so a
-    /// persisted write would be a Windows setting this app could never put back.
+    /// uninstall runs no application code, so no Loadstone will ever run again to put a persisted
+    /// write back; the crash marker itself survives the uninstall (measured, see CLAUDE.md's MSIX
+    /// spike results), but a marker nothing will ever read is no help.
     /// </summary>
     public bool Write(NativeSnapFlag flag, bool value)
     {
