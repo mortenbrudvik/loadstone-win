@@ -20,3 +20,4 @@ packaging/inno/staging/
 *.snk
 .claude/worktrees/
 .superpowers/
+.playwright-mcp/
