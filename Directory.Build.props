@@ -21,5 +21,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- The IDE code-style rules in .editorconfig (file-scoped namespaces, naming) reach the build
+         only with this on. Without it TreatWarningsAsErrors never sees a style rule, CI cannot catch
+         drift, and the conventions hold by discipline alone. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- CS8524 warns that a switch expression over an enum does not handle unnamed values. The tree
+         relies on switch expressions over closed enums (Tile, WindowCommand, NativeSnapFlag,
+         HotkeyState) having NO discard arm, so that adding a member fails the build (CS8509) until
+         every switch covers it. Tree-wide because the tests carry such switches too. -->
+    <NoWarn>$(NoWarn);CS8524</NoWarn>
   </PropertyGroup>
 </Project>

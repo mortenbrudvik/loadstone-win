@@ -19,6 +19,11 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# A read-only token for every job. The package job pinned this first, with its reasoning below; the
+# test job runs on every pull request and inherited whatever the repository default happened to be.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Build and test

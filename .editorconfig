@@ -22,3 +22,43 @@ csharp_style_var_elsewhere = true:suggestion
 csharp_prefer_braces = true:suggestion
 dotnet_sort_system_directives_first = true
 dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:warning
+
+# Naming. Enforced at build by EnforceCodeStyleInBuild in Directory.Build.props, where warnings are
+# errors. The per-rule severities below are what the IDE reads; the build reads IDE1006, whose own
+# severity has to be set or the rules stay editor-only (verified with a deliberate violation on
+# 2026-09-13). Rules are matched in file order, so the constant and static-readonly rules sit above
+# the general private-field rule they carve out of: LogFlushTimeout and Inset are PascalCase on purpose.
+dotnet_diagnostic.IDE1006.severity = warning
+
+# Public members: PascalCase
+dotnet_naming_rule.public_members_must_be_pascal_case.symbols = public_symbols
+dotnet_naming_rule.public_members_must_be_pascal_case.style = pascal_case_style
+dotnet_naming_rule.public_members_must_be_pascal_case.severity = warning
+dotnet_naming_symbols.public_symbols.applicable_kinds = property,method,event
+dotnet_naming_symbols.public_symbols.applicable_accessibilities = public
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# Private constants and static readonly fields: PascalCase
+dotnet_naming_rule.private_constants_must_be_pascal_case.symbols = private_constants
+dotnet_naming_rule.private_constants_must_be_pascal_case.style = pascal_case_style
+dotnet_naming_rule.private_constants_must_be_pascal_case.severity = warning
+dotnet_naming_symbols.private_constants.applicable_kinds = field
+dotnet_naming_symbols.private_constants.applicable_accessibilities = private
+dotnet_naming_symbols.private_constants.required_modifiers = const
+
+dotnet_naming_rule.private_static_readonly_must_be_pascal_case.symbols = private_static_readonly
+dotnet_naming_rule.private_static_readonly_must_be_pascal_case.style = pascal_case_style
+dotnet_naming_rule.private_static_readonly_must_be_pascal_case.severity = warning
+dotnet_naming_symbols.private_static_readonly.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_readonly.required_modifiers = static,readonly
+
+# Every other private field: _camelCase
+dotnet_naming_rule.private_fields_must_be_underscore_camel.symbols = private_fields
+dotnet_naming_rule.private_fields_must_be_underscore_camel.style = underscore_camel_style
+dotnet_naming_rule.private_fields_must_be_underscore_camel.severity = warning
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel_style.capitalization = camel_case
+dotnet_naming_style.underscore_camel_style.required_prefix = _
