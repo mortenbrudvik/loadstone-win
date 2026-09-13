@@ -16,6 +16,38 @@ namespace Loadstone.UI.Tests.Tray;
 public class TrayControllerTests
 {
     /// <summary>
+    /// A system light/dark change used to re-pick only the icon. The app theme - which the tray
+    /// menu's WPF-UI styles draw from - was applied once at startup and then followed the system
+    /// only through the Settings window's watcher, which exists only once Settings has been opened.
+    /// A launch-at-login session that never opened Settings kept the menu in the startup theme.
+    /// The apply itself is WPF-UI's and is taken through a seam: the real one raises a static event
+    /// that every FluentWindow in the process handles on its own thread.
+    /// </summary>
+    [WpfFact]
+    public void FollowSystemTheme_AppliesTheSystemThemeBeforeRePickingTheIcon()
+    {
+        var registrar = Substitute.For<IHotkeyRegistrar>();
+        registrar.Register(Arg.Any<WindowCommand>(), Arg.Any<Shortcut>()).Returns(HotkeyStatus.Registered);
+        var probe = Substitute.For<IKeyboardLayoutProbe>();
+        probe.CharacterTypedBy(Arg.Any<Shortcut>()).Returns((string?)null);
+        using var hotkeys = new HotkeyCenter(registrar, new InMemorySettings(), Substitute.For<ICommandDispatcher>(), probe, NullLogger<HotkeyCenter>.Instance);
+        var applied = 0;
+        var tray = new TrayController(Substitute.For<ICommandDispatcher>(), hotkeys, new ShellActions(), NullLogger<TrayController>.Instance, () => applied++);
+        try
+        {
+            applied.ShouldBe(0);
+
+            tray.FollowSystemTheme();
+
+            applied.ShouldBe(1);
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+    }
+
+    /// <summary>
     /// The constructor builds the menu and the icon object and does nothing else the user can see:
     /// the icon reaches the tray and the static SystemEvents are hooked only in Start(), which no
     /// test calls. That is what lets the container smoke test resolve the controller at all.

@@ -21,6 +21,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Test collections run one at a time in this assembly. The real-window tests share one desktop,
+         one keyboard and one foreground window: run in parallel on separate STA threads, a window shown
+         by one class steals activation and focus from another's, and the recorder tests - which read
+         the live keyboard state and assert on who has focus - fail for reasons that are nowhere in the
+         diff. Serial costs a few seconds and buys a suite that means the same thing every run. -->
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- One settings fake for both test projects; the two copies had already diverged. The linked
          file keeps its Core.Tests namespace, which the global using makes visible here. -->
     <Compile Include="..\Loadstone.Core.Tests\Settings\InMemorySettings.cs" Link="InMemorySettings.cs" />

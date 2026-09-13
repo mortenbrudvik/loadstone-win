@@ -15,6 +15,7 @@ using Loadstone.UI.Services;
 using Loadstone.UI.Windows;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+using Wpf.Ui.Appearance;
 using static Loadstone.UI.Interop.NativeMethods;
 
 namespace Loadstone.UI.Tray;
@@ -36,16 +37,29 @@ internal sealed class TrayController : IDisposable
     private readonly ILogger<TrayController> _logger;
     private readonly ContextMenu _menu = new();
     private readonly TaskbarIcon _icon;
+    private readonly Action _applySystemTheme;
     private Icon? _trayIcon;
     private WindowIdentity? _capturedForeground;
     private bool _started;
 
     public TrayController(ICommandDispatcher dispatcher, HotkeyCenter hotkeys, ShellActions shell, ILogger<TrayController> logger)
+        : this(dispatcher, hotkeys, shell, logger, ApplicationThemeManager.ApplySystemTheme)
+    {
+    }
+
+    /// <summary>
+    /// The theme apply as a seam. ApplicationThemeManager.Apply raises a static event that every
+    /// FluentWindow in the process handles on its own thread, so a test that called the real one
+    /// after another test's window existed died of cross-thread access; the test checks the wiring
+    /// and leaves the apply to WPF-UI.
+    /// </summary>
+    internal TrayController(ICommandDispatcher dispatcher, HotkeyCenter hotkeys, ShellActions shell, ILogger<TrayController> logger, Action applySystemTheme)
     {
         _dispatcher = dispatcher;
         _hotkeys = hotkeys;
         _shell = shell;
         _logger = logger;
+        _applySystemTheme = applySystemTheme;
 
         Rebuild();
         _icon = new TaskbarIcon
@@ -139,8 +153,22 @@ internal sealed class TrayController : IDisposable
     {
         if (e.Category == UserPreferenceCategory.General)
         {
-            Application.Current?.Dispatcher.BeginInvoke(ApplyThemeIcon);
+            Application.Current?.Dispatcher.BeginInvoke(FollowSystemTheme);
         }
+    }
+
+    /// <summary>
+    /// Brings the app theme and the icon to the system's. The theme is applied once at startup and is
+    /// otherwise followed only by the Settings window's watcher, which exists once Settings has been
+    /// opened: a launch-at-login session that never opened it kept the menu - drawn from the WPF-UI
+    /// theme dictionaries - in the startup theme after a light/dark switch. Applying it here as well
+    /// is idempotent once the watcher is live. WPF-UI dresses Application.MainWindow on every apply,
+    /// which is why the Settings window, not the snap preview, holds that slot.
+    /// </summary>
+    internal void FollowSystemTheme()
+    {
+        _applySystemTheme();
+        ApplyThemeIcon();
     }
 
     /// <summary>The small-icon metric moves with the display scale, so the frame is chosen again.</summary>
