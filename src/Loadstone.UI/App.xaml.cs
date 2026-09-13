@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Autofac;
@@ -52,6 +53,10 @@ public partial class App : Application
         // DACL this process cannot open for full control, and the user who double-clicked Loadstone
         // to open Settings got an unhandled-exception dialog and an empty log instead.
         InstallExceptionHandlers();
+
+        // NLog's own log, before the handshake below and long before the host: it is the one channel
+        // that needs no logger, and the handshake is the one place a failure used to leave no trace.
+        LoggingSetup.EnableInternalLog();
 
         var showSettings = TryBecomeTheOnlyInstance();
         if (showSettings is null)
@@ -136,18 +141,27 @@ public partial class App : Application
         // await here would let a queued second launch build Settings from a half-finished container.
         // Queue it instead. The Settings window is only ever built on a user action, which cannot
         // happen before this lands.
-        Dispatcher.BeginInvoke(() => _ = InitializeStartupAsync(services, settings));
+        Defer(() => InitializeStartupAsync(services, settings));
     }
+
+    /// <summary>
+    /// Queues asynchronous work on the dispatcher and gives a fault the treatment a synchronous throw
+    /// on the UI thread gets: the async lambda posts its exception back to the dispatcher, where
+    /// <see cref="DispatcherUnhandledException"/> logs it as fatal, restores the snap flags and lets
+    /// the process end. The discarded-task idiom this replaces carried the fault to
+    /// <see cref="TaskScheduler.UnobservedTaskException"/>, which fires from the finalizer - so a
+    /// first-run Settings failure was logged only if the GC happened to run before exit, and usually
+    /// not at all.
+    /// </summary>
+    private void Defer(Func<Task> work) => Dispatcher.BeginInvoke(async () => await work());
 
     /// <summary>
     /// The deferred half of startup. Not everything below is guaranteed not to throw:
     /// <see cref="PackagedStartupRegistration.InitializeAsync"/> catches broadly by design, but
     /// <see cref="RegistryStartupRegistration.InitializeAsync"/> only catches registry refusals and
-    /// lets a genuine bug through. What actually makes this safe to fire-and-forget is
-    /// <see cref="TaskScheduler.UnobservedTaskException"/>, wired up in
-    /// <see cref="InstallExceptionHandlers"/>: an exception here is captured on the discarded task
-    /// rather than thrown synchronously, and is only observed - logged, not crashed on - once that
-    /// task is finalized.
+    /// lets a genuine bug through, and <see cref="ShowSettings"/> builds a window. A throw here
+    /// reaches the dispatcher's fatal policy through <see cref="Defer"/>, the same as it would from a
+    /// tray click.
     /// </summary>
     private async Task InitializeStartupAsync(IServiceProvider services, ISettingsService settings)
     {
@@ -183,7 +197,7 @@ public partial class App : Application
             // container that is on its way out.
             BestEffort("stop listening for a second launch", () => _showSettingsListener?.Dispose());
 
-            // Section 7 promises the user's edge snapping back after a quit, so nothing above
+            // Spec 7.1, "Windows edge snapping", promises the user's edge snapping back after a quit, so nothing above
             // Restore may cost them that: each teardown step is best-effort and Restore is the
             // one call the finally guarantees. Both bookends live inside the protected region for
             // the same reason - resolving NativeSnap and stopping the follow used to sit above the
@@ -208,9 +222,12 @@ public partial class App : Application
                 NLog.LogManager.Flush(LogFlushTimeout);
             }
 
-            // Wrapped as well: a throw out of either of these used to lose everything after it,
-            // including the buffered tail of the log - the part most likely to explain the throw.
-            BestEffort("stop the host", () => host.StopAsync().GetAwaiter().GetResult());
+            // Dispose only. Nothing is hosted, so there is nothing for StopAsync to stop, and it was
+            // the one blocking wait on the UI thread in the tree: safe while Hosting awaits with
+            // ConfigureAwait(false) and no hosted service marshals back here, and a wait for
+            // HostOptions.ShutdownTimeout the day one does. Wrapped as well: a throw here used to lose
+            // everything after it, including the buffered tail of the log - the part most likely to
+            // explain the throw.
             BestEffort("dispose the host", host.Dispose);
         }
 
@@ -229,7 +246,7 @@ public partial class App : Application
     /// container rather than through the window, because the queued refresh must reach the same
     /// singleton <see cref="SettingsViewModel"/> instance the window is bound to, not a copy of it -
     /// see <see cref="SettingsViewModel.RefreshStartupAsync"/> for why the re-read exists at all.
-    /// Queued with the same fire-and-forget idiom as <see cref="InitializeStartupAsync"/>: showing the
+    /// Queued through <see cref="Defer"/>, like <see cref="InitializeStartupAsync"/>: showing the
     /// window must stay synchronous. On a single open, the queued refresh lands before the user can
     /// touch the toggle, since nothing pumps the dispatcher between here and
     /// <see cref="SettingsWindow.ShowAndActivate"/> returning - but nothing here checks whether the
@@ -248,7 +265,7 @@ public partial class App : Application
 
         var services = host.Services;
         var settings = services.GetRequiredService<SettingsViewModel>();
-        Dispatcher.BeginInvoke(() => _ = settings.RefreshStartupAsync());
+        Defer(settings.RefreshStartupAsync);
         services.GetRequiredService<SettingsWindow>().ShowAndActivate();
     }
 
@@ -257,11 +274,13 @@ public partial class App : Application
     /// that already holds it to show Settings and returns null, meaning this process must leave.
     /// </summary>
     /// <remarks>
-    /// The whole handshake is guarded because both halves of it open kernel objects by name, and
-    /// both throw UnauthorizedAccessException when an instance running at another integrity level
-    /// owns them with a DACL this process may not open for full control. There is no logger yet and
-    /// nothing the user could act on, so a failed handshake leaves quietly rather than running a
-    /// second tiler over the first one's hotkeys.
+    /// The handshake is guarded because both halves of it open kernel objects by name, and both throw
+    /// UnauthorizedAccessException when an instance running at another integrity level owns them with
+    /// a DACL this process may not open for full control. There is nothing the user could act on, so
+    /// a refused handshake leaves quietly rather than running a second tiler over the first one's
+    /// hotkeys - but not silently: there is no logger yet, so the refusal goes to NLog's internal
+    /// log, enabled before this runs, where a later diagnosis of "Loadstone refuses to start" can
+    /// find it. Only the documented refusals are caught; a genuine bug still crashes visibly.
     /// </remarks>
     private EventWaitHandle? TryBecomeTheOnlyInstance()
     {
@@ -286,8 +305,9 @@ public partial class App : Application
             User32.AllowSetForegroundWindow(NativeConstants.ASFW_ANY);
             showSettings.Set();
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
         {
+            NLog.Common.InternalLogger.Error(ex, "the single-instance handshake was refused; this launch is leaving without starting. An instance running at another integrity level (an elevated one, say) owns the named mutex or event.");
         }
 
         showSettings?.Dispose();

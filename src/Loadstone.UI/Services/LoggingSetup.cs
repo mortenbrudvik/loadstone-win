@@ -44,6 +44,18 @@ internal static class LoggingSetup
         }
     }
 
+    /// <summary>
+    /// Points NLog's own log at <see cref="InternalLogFile"/>. Static and host-free on purpose: the
+    /// single-instance handshake runs before the host, and with it the logger, exists, and a failure
+    /// there used to leave nothing on disk at all - an app that looks as if it refuses to start.
+    /// <see cref="Build"/> calls this too, so calling it first costs nothing.
+    /// </summary>
+    public static void EnableInternalLog()
+    {
+        InternalLogger.LogFile = InternalLogFile;
+        InternalLogger.LogLevel = NLog.LogLevel.Warn;
+    }
+
     /// <summary>Daily files, 14 kept, 10 MB archive threshold, written asynchronously.</summary>
     public static LoggingConfiguration Build()
     {
@@ -51,8 +63,7 @@ internal static class LoggingSetup
         // ThrowExceptions stays off - a logging failure must not take a window tiler down - which
         // leaves an unwritable log directory looking exactly like a quiet run. The internal logger
         // is the one place those complaints can still land.
-        InternalLogger.LogFile = InternalLogFile;
-        InternalLogger.LogLevel = NLog.LogLevel.Warn;
+        EnableInternalLog();
 
         var config = new LoggingConfiguration();
         var file = new FileTarget("file")

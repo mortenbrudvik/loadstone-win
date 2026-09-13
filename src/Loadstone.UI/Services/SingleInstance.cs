@@ -56,12 +56,15 @@ internal static class SingleInstance
     }
 
     /// <summary>
-    /// Guards the pool thread. An exception escaping a <see cref="ThreadPool"/> callback ends the
-    /// process, and the one that actually happens is InvalidOperationException out of
-    /// Dispatcher.BeginInvoke: between Shutdown() starting and this listener being disposed, a
-    /// second launch would kill the first instance from a pool thread mid-exit - before Restore has
-    /// given the user their edge snapping back. There is nothing to say about it either, since the
-    /// only thing that request can be told is that Loadstone is already leaving.
+    /// Guards the pool thread against the one exception that is expected here. An exception escaping
+    /// a <see cref="ThreadPool"/> callback ends the process, and the one that actually happens is
+    /// InvalidOperationException out of Dispatcher.BeginInvoke: between Shutdown() starting and this
+    /// listener being disposed, a second launch would kill the first instance from a pool thread
+    /// mid-exit - before Restore has given the user their edge snapping back. There is nothing to say
+    /// about it either, since the only thing that request can be told is that Loadstone is already
+    /// leaving. Anything else is a genuine bug and reaches AppDomain.UnhandledException, where the
+    /// app logs it as fatal and restores the flags on its way out; a blanket catch here used to hide
+    /// that with no record anywhere.
     /// </summary>
     private static void Signal(Action onSignal)
     {
@@ -69,7 +72,7 @@ internal static class SingleInstance
         {
             onSignal();
         }
-        catch (Exception)
+        catch (InvalidOperationException)
         {
         }
     }
