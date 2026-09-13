@@ -62,6 +62,37 @@ public class RecorderKeyHandlerTests
     }
 
     /// <summary>
+    /// Alt+F4 is the shell's own close chord. The recorder swallows the press that would have closed
+    /// Settings, and RegisterHotKey would then take Alt+F4 from every application until the row is
+    /// rebound, so it is refused the way a bare letter is. With another modifier it is an ordinary chord.
+    /// </summary>
+    [Fact]
+    public void Handle_AltF4_IsIgnored()
+    {
+        RecorderKeyHandler.Handle(KeyModifiers.Alt, VirtualKeys.F1 + 3).Kind.ShouldBe(RecorderActionKind.Ignore);
+        RecorderKeyHandler.Handle(CtrlAlt, VirtualKeys.F1 + 3).Kind.ShouldBe(RecorderActionKind.Commit);
+    }
+
+    /// <summary>
+    /// Tab leaves the recorder for focus traversal, and so does Tab with Ctrl or Shift: WPF's TabControl
+    /// switches tabs on Ctrl+Tab from inside its content, and a recorder that committed it would bind
+    /// Ctrl+Tab system-wide the first time a keyboard user reached for the General tab. Alt and Win
+    /// combinations are chords of their own and still record.
+    /// </summary>
+    [Theory]
+    [InlineData(Key.Tab, ModifierKeys.None, true)]
+    [InlineData(Key.Tab, ModifierKeys.Shift, true)]
+    [InlineData(Key.Tab, ModifierKeys.Control, true)]
+    [InlineData(Key.Tab, ModifierKeys.Control | ModifierKeys.Shift, true)]
+    [InlineData(Key.Tab, ModifierKeys.Alt, false)]
+    [InlineData(Key.Tab, ModifierKeys.Windows, false)]
+    [InlineData(Key.F5, ModifierKeys.Control, false)]
+    public void LeavesTabToFocusTraversal_ForTabWithAtMostCtrlAndShiftHeld(Key key, ModifierKeys modifiers, bool expected)
+    {
+        ShortcutRecorder.LeavesTabToFocusTraversal(key, modifiers).ShouldBe(expected);
+    }
+
+    /// <summary>
     /// The two translations between WPF's keyboard and the pure handler above, which the handler's own
     /// tests cannot see. Both sit under every chord the recorder produces: a swapped pair here, or a
     /// lost <see cref="Key.System"/> branch, would rewrite or refuse every default shortcut in the

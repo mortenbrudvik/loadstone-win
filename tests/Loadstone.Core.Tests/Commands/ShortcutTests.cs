@@ -135,10 +135,13 @@ public class ShortcutTests
     [InlineData("Shift+F24", true)]
     [InlineData("A", false)]
     [InlineData("Backspace", false)]
-    public void IsUsable_RequiresModifiers_ExceptOnAFunctionKey(string text, bool usable)
+    [InlineData("Alt+F4", false)]
+    [InlineData("Ctrl+Alt+F4", true)]
+    public void IsUsable_RequiresModifiers_ExceptOnAFunctionKey_AndRefusesAltF4(string text, bool usable)
     {
         // A hand-edited "restore": "Backspace" parses fine, and RegisterHotKey would then swallow
-        // Backspace in every app on the machine.
+        // Backspace in every app on the machine. Alt+F4 is the shell's close chord and would be taken
+        // from every application the same way.
         Shortcut.Parse(text).IsUsable.ShouldBe(usable, text);
     }
 

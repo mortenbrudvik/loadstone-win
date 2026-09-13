@@ -25,10 +25,14 @@ public sealed record Shortcut(KeyModifiers Modifiers, int VirtualKey)
     /// settings loader can apply it too: a hand-edited <c>"restore": "Backspace"</c> parses perfectly
     /// well, and RegisterHotKey would then swallow Backspace system-wide, in every app, with no way
     /// left to type it. Only F1..F24 may go bare; a modifier-only chord cannot even be constructed
-    /// because the key itself must not be a modifier.
+    /// because the key itself must not be a modifier. Alt+F4 is refused for the same reason from the
+    /// other side: it is the shell's close chord, and a registered hotkey wins over the window it was
+    /// meant for, so no window on the machine could be closed from the keyboard until it was rebound.
     /// </summary>
     public bool IsUsable =>
-        Modifiers != KeyModifiers.None || VirtualKey is >= VirtualKeys.F1 and <= VirtualKeys.F24;
+        !IsShellCloseChord && (Modifiers != KeyModifiers.None || VirtualKey is >= VirtualKeys.F1 and <= VirtualKeys.F24);
+
+    private bool IsShellCloseChord => Modifiers == KeyModifiers.Alt && VirtualKey == VirtualKeys.F4;
 
     public static bool TryParse(string? text, [NotNullWhen(true)] out Shortcut? shortcut)
     {

@@ -38,12 +38,15 @@ internal static class RecorderKeyHandler
             return new RecorderAction(RecorderActionKind.Clear);
         }
 
-        var isFunctionKey = virtualKey is >= VirtualKeys.F1 and <= VirtualKeys.F24;
-        if (held == KeyModifiers.None && !isFunctionKey)
+        // IsUsable is the one statement of which chords may be registered - a bare key that is not a
+        // function key, or Alt+F4 - and it is shared with the settings loader, so a key press and a
+        // hand-edited settings.json are judged by the same rule.
+        var shortcut = new Shortcut(held, virtualKey);
+        if (!shortcut.IsUsable)
         {
             return new RecorderAction(RecorderActionKind.Ignore);
         }
 
-        return new RecorderAction(RecorderActionKind.Commit, new Shortcut(held, virtualKey));
+        return new RecorderAction(RecorderActionKind.Commit, shortcut);
     }
 }

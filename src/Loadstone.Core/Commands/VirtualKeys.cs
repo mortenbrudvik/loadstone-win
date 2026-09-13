@@ -24,6 +24,7 @@ public static class VirtualKeys
     public const int LWin = 0x5B;
     public const int RWin = 0x5C;
     public const int F1 = 0x70;
+    public const int F4 = 0x73;
     public const int F24 = 0x87;
     public const int LShift = 0xA0;
     public const int RShift = 0xA1;

@@ -10,10 +10,10 @@ namespace Loadstone.UI.Controls;
 /// Records a global shortcut. Keyboard focus starts recording, and so does an explicit activation —
 /// a click, or Space or Enter — so a second recording can be started on the control that already has
 /// focus. A key press with a modifier commits, a function key commits alone, Escape cancels,
-/// Backspace or Delete alone clears, and Tab or Shift+Tab moves focus on instead of being recorded so
-/// the control can be left with the keyboard. Stopping leaves focus where it is, so no other recorder
-/// is armed by it. While recording, the owning view model suspends the real hotkeys through
-/// <see cref="IsRecording"/>.
+/// Backspace or Delete alone clears, and Tab with nothing, Shift, or Ctrl held moves focus or switches
+/// tabs instead of being recorded so the window can be worked with the keyboard. Stopping leaves focus
+/// where it is, so no other recorder is armed by it. While recording, the owning view model suspends
+/// the real hotkeys through <see cref="IsRecording"/>.
 /// </summary>
 public partial class ShortcutRecorder : UserControl
 {
@@ -77,12 +77,7 @@ public partial class ShortcutRecorder : UserControl
         // main path, not an edge case: without the translation Alt+Left records as the System key.
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
 
-        // Tab and Shift+Tab are deliberately left unhandled so focus traversal still works both ways.
-        // Recording starts on keyboard focus, so a recorder that swallowed them would trap a
-        // keyboard-only user inside it with no way out but Escape (spec 8.3, "Shortcut recorder", says
-        // the control is focusable by Tab; WCAG 2.1.2). The cost is that Shift+Tab cannot be recorded
-        // as a chord; Ctrl, Alt, and Win combinations with Tab still reach the handler below.
-        if (key == Key.Tab && (Keyboard.Modifiers & ~ModifierKeys.Shift) == ModifierKeys.None)
+        if (LeavesTabToFocusTraversal(key, Keyboard.Modifiers))
         {
             base.OnPreviewKeyDown(e);
             return;
@@ -108,6 +103,19 @@ public partial class ShortcutRecorder : UserControl
                 break;
         }
     }
+
+    /// <summary>
+    /// Whether a press is left unhandled so the window's own keyboard navigation gets it. Tab and
+    /// Shift+Tab move focus, and recording starts on keyboard focus, so a recorder that swallowed them
+    /// would trap a keyboard-only user inside it with no way out but Escape (spec 8.3, "Shortcut
+    /// recorder", says the control is focusable by Tab; WCAG 2.1.2). Ctrl+Tab and Ctrl+Shift+Tab are
+    /// how WPF's TabControl switches tabs from inside its content, and a recorder that committed them
+    /// bound Ctrl+Tab system-wide the first time a keyboard user reached for the General tab. The cost
+    /// is that none of the four can be recorded as a chord; Alt and Win combinations with Tab still
+    /// reach the handler.
+    /// </summary>
+    internal static bool LeavesTabToFocusTraversal(Key key, ModifierKeys modifiers) =>
+        key == Key.Tab && (modifiers & ~(ModifierKeys.Shift | ModifierKeys.Control)) == ModifierKeys.None;
 
     /// <summary>
     /// Translates WPF's modifier set into the Core one. Internal rather than private so a test can pin

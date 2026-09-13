@@ -238,7 +238,7 @@ internal sealed class HotkeyCenter : IDisposable
         if (!stored.IsUsable && _rejectedTextReported.Add(command))
         {
             _logger.LogWarning(
-                "{Command}: stored shortcut \"{Text}\" has no modifier and is not a function key; registering it would take that key away from every application, so treating it as unbound",
+                "{Command}: stored shortcut \"{Text}\" is not a chord this app will register (a bare key that is not a function key, or Alt+F4); registering it would take that key away from every application, so treating it as unbound",
                 command.Id(),
                 text);
         }
