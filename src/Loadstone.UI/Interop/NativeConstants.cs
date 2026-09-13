@@ -6,6 +6,7 @@ internal static class NativeConstants
     public const long WS_BORDER = 0x00800000;
     public const long WS_CAPTION = 0x00C00000; // WS_BORDER | WS_DLGFRAME
     public const long WS_THICKFRAME = 0x00040000;
+    public const long WS_MAXIMIZEBOX = 0x00010000;
     public const long WS_EX_TRANSPARENT = 0x00000020;
     public const long WS_EX_TOOLWINDOW = 0x00000080;
     public const long WS_EX_NOACTIVATE = 0x08000000;
@@ -21,8 +22,11 @@ internal static class NativeConstants
     // SetWindowPos. HWND_TOPMOST is a negative pseudo-handle the z-order slot is named by, not a real
     // window handle and not an error return; SetWindowPos takes it in hWndInsertAfter.
     public static readonly nint HWND_TOPMOST = -1;
+    public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_FRAMECHANGED = 0x0020;
     public const uint SWP_SHOWWINDOW = 0x0040;
 
     // DWM

@@ -1,27 +1,48 @@
 ﻿using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Interop;
 using System.Windows.Media.Imaging;
+using Loadstone.UI.Interop;
 using Loadstone.UI.ViewModels;
+using Loadstone.UI.Windows;
+using Microsoft.Extensions.Logging;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
+using static Loadstone.UI.Interop.NativeMethods;
 
 namespace Loadstone.UI.Views;
 
 /// <summary>Created once and hidden on close; shown again by the tray or a second launch.</summary>
 internal partial class SettingsWindow : FluentWindow
 {
-    public SettingsWindow(SettingsViewModel general, ShortcutsViewModel shortcuts)
+    private readonly ILogger<SettingsWindow> _logger;
+
+    public SettingsWindow(SettingsViewModel general, ShortcutsViewModel shortcuts, ILogger<SettingsWindow> logger)
     {
+        _logger = logger;
         InitializeComponent();
         General = general;
         Shortcuts = shortcuts;
         DataContext = this;
-        if (AppIconFrame(32) is { } frame)
+        if (AppIconFrame(32, logger) is { } frame)
         {
             SettingsTitleBar.Icon = new ImageIcon { Source = frame };
+        }
+
+        // WPF makes the first Window it constructs Application.MainWindow, and in this app that is
+        // the snap preview, built at startup long before this window. WPF-UI's
+        // ApplicationThemeManager.Apply runs WindowBackgroundManager.UpdateBackground on MainWindow at
+        // every theme apply, which restores an opaque background first and, on builds before 22523,
+        // never clears it again - the translucent preview became a solid slab after a theme change.
+        // This is the window the theme should dress, so it takes the slot. Null under the test host,
+        // which has no Application.
+        if (Application.Current is { } app)
+        {
+            app.MainWindow = this;
         }
 
         SystemThemeWatcher.Watch(this);
@@ -33,7 +54,7 @@ internal partial class SettingsWindow : FluentWindow
     /// The component-qualified pack URI resolves under the test host too, whose entry assembly is not
     /// Loadstone.
     /// </summary>
-    private static BitmapFrame? AppIconFrame(int pixels)
+    private static BitmapFrame? AppIconFrame(int pixels, ILogger logger)
     {
         try
         {
@@ -45,8 +66,41 @@ internal partial class SettingsWindow : FluentWindow
         }
         catch (Exception ex) when (ex is IOException or NotSupportedException or FileFormatException or UriFormatException)
         {
+            logger.LogError(ex, "could not load the app icon for the Settings title bar; the window opens without one");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Takes the maximize box out of the window style. ShowMaximize="False" on the title bar only
+    /// hides the button: the style bit is what the shell consults for a title-bar double-click and
+    /// Win+Up, and WPF sets it for every ResizeMode that allows resizing, which this window needs for
+    /// its minimum size. Done here because the style word exists only once the HWND does.
+    /// </summary>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (WindowStyles.StyleWord(hwnd, NativeConstants.GWL_STYLE) is not { } style)
+        {
+            _logger.LogError("could not read the Settings window style; the maximize box stays");
+            return;
+        }
+
+        // Like the read, SetWindowLongPtr returns 0 both for a previous value of 0 and for failure, so
+        // the thread's last error - cleared first - is what tells the two apart.
+        Marshal.SetLastSystemError(0);
+        var previous = User32.SetWindowLongPtr(hwnd, NativeConstants.GWL_STYLE, (nint)(style & ~NativeConstants.WS_MAXIMIZEBOX));
+        var error = Marshal.GetLastWin32Error();
+        if (previous == 0 && error != 0)
+        {
+            _logger.LogError("could not remove the maximize box from the Settings window: error {Error}", error);
+            return;
+        }
+
+        // Style changes are cached until the frame is told they happened.
+        _ = User32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+            NativeConstants.SWP_NOMOVE | NativeConstants.SWP_NOSIZE | NativeConstants.SWP_NOZORDER | NativeConstants.SWP_NOACTIVATE | NativeConstants.SWP_FRAMECHANGED);
     }
 
     public SettingsViewModel General { get; }

@@ -29,7 +29,8 @@
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
 
-    <ui:TitleBar x:Name="SettingsTitleBar" Grid.Row="0" Title="Loadstone Settings" ShowMaximize="False" />
+    <!-- The maximize box itself is removed from the window style in OnSourceInitialized; these two only cover the button. -->
+    <ui:TitleBar x:Name="SettingsTitleBar" Grid.Row="0" Title="Loadstone Settings" ShowMaximize="False" CanMaximize="False" />
 
     <TabControl Grid.Row="1" Margin="16,8,16,16">
 
@@ -72,6 +73,7 @@
                       Appearance="Secondary"
                       FontTypography="Caption"
                       TextWrapping="Wrap"
+                      AutomationProperties.LiveSetting="Polite"
                       Text="{Binding LaunchAtLoginMessage}" />
                 </DockPanel>
                 <ui:TextBlock
@@ -79,6 +81,7 @@
                     Foreground="{DynamicResource SystemFillColorCautionBrush}"
                     FontTypography="Caption"
                     TextWrapping="Wrap"
+                    AutomationProperties.LiveSetting="Polite"
                     Text="{Binding LaunchAtLoginActionMessage}"
                     Visibility="{Binding LaunchAtLoginActionMessage, Converter={StaticResource StringToVisibilityConverter}}" />
               </StackPanel>
@@ -124,6 +127,8 @@
                               <ui:TextBlock
                                   Foreground="{DynamicResource SystemFillColorCautionBrush}"
                                   FontTypography="Caption"
+                                  TextWrapping="Wrap"
+                                  AutomationProperties.LiveSetting="Polite"
                                   Text="{Binding Status}"
                                   Visibility="{Binding Status, Converter={StaticResource StringToVisibilityConverter}}" />
                             </StackPanel>
