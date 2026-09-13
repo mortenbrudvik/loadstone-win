@@ -6,7 +6,8 @@
     Focusable="True"
     MinWidth="180"
     Height="32"
-    AutomationProperties.Name="Shortcut">
+    AutomationProperties.Name="Shortcut"
+    AutomationProperties.HelpText="Press a key combination to set the shortcut. Escape cancels, Backspace clears.">
 
   <Border
       x:Name="Outline"
@@ -25,16 +26,21 @@
           Grid.Column="0"
           Margin="10,0,4,0"
           VerticalAlignment="Center"
-          Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+          AutomationProperties.LiveSetting="Polite" />
 
+      <!-- 28 px each way inside the 32 px control (1 px border, 1 px margin): the guide's minimum pointer target. -->
       <ui:Button
           x:Name="ClearButton"
           Grid.Column="1"
-          Margin="2"
+          Margin="1"
           Padding="4,0"
+          MinWidth="28"
+          MinHeight="28"
           Appearance="Transparent"
           Icon="{ui:SymbolIcon Dismiss16}"
           ToolTip="Clear"
+          AutomationProperties.Name="Clear shortcut"
           Focusable="False"
           Click="OnClearClick" />
     </Grid>

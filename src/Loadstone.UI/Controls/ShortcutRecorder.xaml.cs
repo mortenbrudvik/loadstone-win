@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 using Loadstone.Core.Commands;
 
 namespace Loadstone.UI.Controls;
@@ -159,11 +158,12 @@ public partial class ShortcutRecorder : UserControl
     {
         Text.Text = IsRecording ? "Press a shortcut" : Shortcut?.DisplayText ?? "Not set";
         Text.FontStyle = IsRecording || Shortcut is null ? FontStyles.Italic : FontStyles.Normal;
-        // TryFindResource: in the constructor the control is not in a tree yet and the theme brushes may be unreachable.
-        if (TryFindResource(IsRecording ? "AccentFillColorDefaultBrush" : "ControlStrokeColorDefaultBrush") is Brush brush)
-        {
-            Outline.BorderBrush = brush;
-        }
+
+        // A resource reference, never a brush looked up here and assigned: WPF-UI swaps the theme
+        // dictionary on a light/dark change, and a captured brush kept the old theme's stroke until
+        // the recorder was next touched - a light stroke on a dark ground, which is invisible. The
+        // reference resolves lazily, so it is safe from the constructor, before the control is in a tree.
+        Outline.SetResourceReference(Border.BorderBrushProperty, IsRecording ? "AccentFillColorDefaultBrush" : "ControlStrokeColorDefaultBrush");
 
         ClearButton.Visibility = Shortcut is null || IsRecording ? Visibility.Collapsed : Visibility.Visible;
     }
