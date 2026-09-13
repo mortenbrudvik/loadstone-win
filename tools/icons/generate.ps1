@@ -5,6 +5,7 @@
 # loadstone.ico  : the app icon, the shaded pebble on a transparent ground
 # tray-dark.ico  : the same pebble for the dark taskbar, with a stronger edge so it separates from the bar
 # tray-light.ico : the same pebble for the light taskbar, with a lighter touch of that edge
+# Splash\splash-{dark,light}.scale-{100,150,200}.png : the startup splash, the pebble above the wordmark
 param(
     [string]$OutDir = (Join-Path $PSScriptRoot '..\..\src\Loadstone.UI\Assets'),
     [string]$MsixAssetDir = (Join-Path $PSScriptRoot '..\..\packaging\msix\Assets')
@@ -152,6 +153,80 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s 1.12 0 }
 Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 1.6 }
 Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 0.5 }
+
+function New-RoundedRect([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {
+    $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $d = 2 * $r
+    $p.AddArc($x, $y, $d, $d, 180, 90)
+    $p.AddArc($x + $w - $d, $y, $d, $d, 270, 90)
+    $p.AddArc($x + $w - $d, $y + $h - $d, $d, $d, 0, 90)
+    $p.AddArc($x, $y + $h - $d, $d, $d, 90, 90)
+    $p.CloseFigure()
+    return $p
+}
+
+# The startup splash: the pebble above the wordmark on a rounded plate, one PNG per theme and scale.
+# WPF's SplashScreen draws a bitmap one image pixel to one screen pixel and never scales it, so the app
+# picks the file by the primary display's DPI (StartupSplash.ResourceName) and every measurement here
+# is in 100 percent units times $scale. The plate is opaque and the corners outside it transparent:
+# SplashScreen is a layered window, so the rounding is the image's own alpha. On the dark plate the
+# near-black pebble takes tray-light.ico's lighter edge so it does not sink into the background; the
+# tray-dark edge is tuned for 16 px and at this size reads as a thick grey outline.
+function Write-Splash([string]$path, [double]$scale, [bool]$light) {
+    $w = [int][math]::Round(320 * $scale); $h = [int][math]::Round(200 * $scale)
+    $bmp = New-Object System.Drawing.Bitmap $w, $h, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAlias
+    $g.Clear([System.Drawing.Color]::Transparent)
+
+    $plateColor = if ($light) { [System.Drawing.Color]::FromArgb(255, 243, 243, 243) } else { [System.Drawing.Color]::FromArgb(255, 32, 32, 32) }
+    $borderColor = if ($light) { [System.Drawing.Color]::FromArgb(40, 0, 0, 0) } else { [System.Drawing.Color]::FromArgb(48, 255, 255, 255) }
+    $textColor = if ($light) { [System.Drawing.Color]::FromArgb(255, 27, 27, 27) } else { [System.Drawing.Color]::FromArgb(255, 255, 255, 255) }
+    $border = [float]$scale
+    $plate = New-RoundedRect ($border / 2) ($border / 2) ($w - $border) ($h - $border) (12 * $scale)
+    $fill = New-Object System.Drawing.SolidBrush $plateColor
+    $g.FillPath($fill, $plate)
+    $pen = New-Object System.Drawing.Pen $borderColor, $border
+    $g.DrawPath($pen, $plate)
+    $fill.Dispose(); $pen.Dispose(); $plate.Dispose()
+
+    $pebbleSize = [int][math]::Round(88 * $scale)
+    $pebble = New-Object System.Drawing.Bitmap $pebbleSize, $pebbleSize, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $pg = [System.Drawing.Graphics]::FromImage($pebble)
+    $pg.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $pg.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $pg.Clear([System.Drawing.Color]::Transparent)
+    Draw-Pebble $pg $pebbleSize 1.12 $(if ($light) { 0 } else { 0.5 })
+    $pg.Dispose()
+    $g.DrawImage($pebble, [int](($w - $pebbleSize) / 2), [int][math]::Round(30 * $scale), $pebbleSize, $pebbleSize)
+    $pebble.Dispose()
+
+    # GDI+ swaps a missing family for Microsoft Sans Serif without a word, and these PNGs are committed.
+    $font = New-Object System.Drawing.Font 'Segoe UI Semibold', ([float](28 * $scale)), ([System.Drawing.FontStyle]::Regular), ([System.Drawing.GraphicsUnit]::Pixel)
+    if ($font.Name -ne 'Segoe UI Semibold') { throw "Segoe UI Semibold is not installed; GDI+ substituted $($font.Name)" }
+    $text = New-Object System.Drawing.SolidBrush $textColor
+    $format = New-Object System.Drawing.StringFormat
+    $format.Alignment = [System.Drawing.StringAlignment]::Center
+    $format.LineAlignment = [System.Drawing.StringAlignment]::Center
+    $g.DrawString('Loadstone', $font, $text, (New-Object System.Drawing.RectangleF 0, ([float](126 * $scale)), $w, ([float](48 * $scale))), $format)
+    $font.Dispose(); $text.Dispose(); $format.Dispose()
+
+    $g.Dispose()
+    $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+    "wrote $path"
+}
+
+$splashDir = Join-Path $OutDir 'Splash'
+New-Item -ItemType Directory -Force $splashDir | Out-Null
+
+foreach ($scale in 100, 150, 200) {
+    foreach ($theme in 'dark', 'light') {
+        Write-Splash (Join-Path $splashDir "splash-$theme.scale-$scale.png") ($scale / 100.0) ($theme -eq 'light')
+    }
+}
 
 New-Item -ItemType Directory -Force $MsixAssetDir | Out-Null
 

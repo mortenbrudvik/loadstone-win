@@ -65,6 +65,21 @@ public partial class App : Application
             return;
         }
 
+        // Before the host, so it covers the part of startup that takes time; after the single-instance
+        // handshake, so a second launch that only asks the first to open Settings never flashes it. There
+        // is no logger yet, so a failure is held here and written once there is, and startup goes on
+        // without the splash.
+        StartupSplash? splash = null;
+        Exception? splashFailure = null;
+        try
+        {
+            splash = StartupSplash.Show();
+        }
+        catch (Exception ex)
+        {
+            splashFailure = ex;
+        }
+
         // A bare HostBuilder, not Host.CreateDefaultBuilder: the app has no configuration, and the
         // default builder would read an appsettings.json out of whatever directory Loadstone was
         // launched from. What the hosting infrastructure is allowed to write to the log is decided in
@@ -82,6 +97,11 @@ public partial class App : Application
         _host = host;
         host.Start();
         _logger = host.Services.GetRequiredService<ILogger<App>>();
+        if (splashFailure is not null)
+        {
+            _logger.LogWarning(splashFailure, "could not show the splash screen; starting without it");
+        }
+
         ApplicationThemeManager.ApplySystemTheme();
 
         // Listening starts here rather than at the end of startup. The dispatcher does not pump
@@ -141,7 +161,8 @@ public partial class App : Application
         // await here would let a queued second launch build Settings from a half-finished container.
         // Queue it instead. The Settings window is only ever built on a user action, which cannot
         // happen before this lands.
-        Defer(() => InitializeStartupAsync(services, settings));
+        var splashClosed = splash?.CloseAsync(_logger) ?? Task.CompletedTask;
+        Defer(() => InitializeStartupAsync(services, settings, splashClosed));
     }
 
     /// <summary>
@@ -163,7 +184,7 @@ public partial class App : Application
     /// reaches the dispatcher's fatal policy through <see cref="Defer"/>, the same as it would from a
     /// tray click.
     /// </summary>
-    private async Task InitializeStartupAsync(IServiceProvider services, ISettingsService settings)
+    private async Task InitializeStartupAsync(IServiceProvider services, ISettingsService settings, Task splashClosed)
     {
         var startup = services.GetRequiredService<IStartupRegistration>();
         await startup.InitializeAsync();
@@ -176,6 +197,9 @@ public partial class App : Application
         // a modal would run a nested dispatcher loop and defeat the ordering OnStartup depends on.
         if (settings.IsFirstRun)
         {
+            // Once the splash has gone: it is topmost, and would otherwise sit over the very window it
+            // hands over to. StartupSplash.CloseAsync never faults, so this cannot strand the first run.
+            await splashClosed;
             ShowSettings();
         }
     }

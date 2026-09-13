@@ -26,7 +26,8 @@ internal static class Displays
     /// <remarks>
     /// Silent: a failure taken through this overload is reported to nobody and an empty list is all
     /// the caller gets. Production goes through <see cref="Source"/> instead, so what is left here
-    /// are the tests, which read the returned list rather than the log.
+    /// are the tests, which read the returned list rather than the log, and StartupSplash, which runs
+    /// before any logger exists and loses nothing worse than a splash drawn for 100 percent scaling.
     /// </remarks>
     public static IReadOnlyList<Display> Snapshot() => Snapshot(NullLogger.Instance);
 
