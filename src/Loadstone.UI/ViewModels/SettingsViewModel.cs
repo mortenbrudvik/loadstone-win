@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Loadstone.Core.Platform;
 using Loadstone.Core.Settings;
+using Loadstone.UI.Interop;
 using Loadstone.UI.Services;
 using Microsoft.Extensions.Logging;
 
@@ -16,6 +17,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsService _settings;
     private readonly IStartupRegistration _startup;
     private readonly ILogger<SettingsViewModel> _logger;
+    private readonly Func<string, bool> _tryOpen;
+    private readonly Action _beep;
+    private readonly string _logDirectory;
 
     /// <summary>
     /// Echo suppression, raised while the view model assigns its own properties so that showing state
@@ -25,7 +29,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private bool _loading;
 
     /// <summary>
-    /// <see cref="SetLaunchAtLogin"/>'s re-entrancy guard, held across the write so a second click
+    /// <see cref="SetLaunchAtLoginAsync"/>'s re-entrancy guard, held across the write so a second click
     /// cannot start a second one. Deliberately not the same flag as <see cref="_loading"/>: the
     /// packaged write is an out-of-process call and the dispatcher pumps input for the whole of it,
     /// so anything a suppression flag swallowed in that window would be a real user change. One flag
@@ -35,10 +39,29 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private bool _writing;
 
     public SettingsViewModel(ISettingsService settings, IStartupRegistration startup, ILogger<SettingsViewModel> logger)
+        : this(settings, startup, logger, uri => UriLauncher.TryOpen(uri, logger), Feedback.Beep, LoggingSetup.LogDirectory)
+    {
+    }
+
+    /// <summary>
+    /// The shell and the log directory as seams, the way <c>CommandDispatcher</c> takes its focused
+    /// window and its beep: through the public constructor, <see cref="OpenLogFolder"/> creates the
+    /// real log directory and starts Explorer on it, which no test may do.
+    /// </summary>
+    internal SettingsViewModel(
+        ISettingsService settings,
+        IStartupRegistration startup,
+        ILogger<SettingsViewModel> logger,
+        Func<string, bool> tryOpen,
+        Action beep,
+        string logDirectory)
     {
         _settings = settings;
         _startup = startup;
         _logger = logger;
+        _tryOpen = tryOpen;
+        _beep = beep;
+        _logDirectory = logDirectory;
         LaunchAtLoginMessage = "";
         LaunchAtLoginActionMessage = "";
         WithoutSideEffects(() => DragSnappingEnabled = settings.Current.DragSnappingEnabled);
@@ -63,7 +86,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// Transient feedback about the toggle's own last action, owned entirely by
-    /// <see cref="SetLaunchAtLogin"/>: cleared when an attempt starts, set when the write comes back
+    /// <see cref="SetLaunchAtLoginAsync"/>: cleared when an attempt starts, set when the write comes back
     /// false, and never touched by <see cref="RefreshStartup"/>. Kept apart from
     /// <see cref="LaunchAtLoginMessage"/> so that a refresh triggered for an unrelated reason - the
     /// packaged status snapshot being re-read on every Settings open - cannot silently erase the
@@ -97,7 +120,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// have half landed.
     /// </summary>
     [RelayCommand]
-    private async Task SetLaunchAtLogin(bool value)
+    private async Task SetLaunchAtLoginAsync(bool value)
     {
         if (_writing)
         {
@@ -130,7 +153,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenStartupApps() => UriLauncher.OpenOrBeep("ms-settings:startupapps", _logger);
+    private void OpenStartupApps() => OpenOrBeep("ms-settings:startupapps");
 
     /// <summary>
     /// Creates the directory before opening it. NLog makes it on first write, so on a run where
@@ -142,7 +165,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     {
         try
         {
-            Directory.CreateDirectory(LoggingSetup.LogDirectory);
+            Directory.CreateDirectory(_logDirectory);
         }
         // Wider than this path is likely to need, on purpose: an escape from a button click on the UI
         // thread ends the process and takes the hotkeys and the user's edge snapping with it, which is
@@ -154,7 +177,16 @@ internal sealed partial class SettingsViewModel : ObservableObject
             _logger.LogError(ex, "could not create the log directory before opening it");
         }
 
-        UriLauncher.OpenOrBeep(LoggingSetup.LogDirectory, _logger);
+        OpenOrBeep(_logDirectory);
+    }
+
+    /// <summary>Opens the URI, or beeps when nothing handled it: a tray-only app has nowhere to show an error.</summary>
+    private void OpenOrBeep(string uri)
+    {
+        if (!_tryOpen(uri))
+        {
+            _beep();
+        }
     }
 
     /// <summary>

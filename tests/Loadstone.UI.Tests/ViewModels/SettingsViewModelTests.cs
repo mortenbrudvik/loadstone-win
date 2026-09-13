@@ -1,3 +1,4 @@
+using System.IO;
 using Loadstone.Core.Platform;
 using Loadstone.UI.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,12 +8,45 @@ using Xunit;
 
 namespace Loadstone.UI.Tests.ViewModels;
 
-public class SettingsViewModelTests
+public sealed class SettingsViewModelTests : IDisposable
 {
     private readonly InMemorySettings _settings = new();
     private readonly IStartupRegistration _startup = Substitute.For<IStartupRegistration>();
+    private readonly List<string> _opened = [];
+    private readonly string _scratch = Path.Combine(Path.GetTempPath(), "LoadstoneTests", Guid.NewGuid().ToString("N"));
+    private string _logDirectory;
+    private bool _shellOpens = true;
+    private int _beeps;
 
-    private SettingsViewModel NewViewModel() => new(_settings, _startup, NullLogger<SettingsViewModel>.Instance);
+    public SettingsViewModelTests()
+    {
+        _logDirectory = Path.Combine(_scratch, "Logs");
+    }
+
+    /// <summary>
+    /// The internal constructor, so no test ever hands a URI to the shell: through the public one,
+    /// OpenLogFolder starts Explorer on the real log folder, which is exactly what a test run must
+    /// not do.
+    /// </summary>
+    private SettingsViewModel NewViewModel() => new(
+        _settings,
+        _startup,
+        NullLogger<SettingsViewModel>.Instance,
+        uri =>
+        {
+            _opened.Add(uri);
+            return _shellOpens;
+        },
+        () => _beeps++,
+        _logDirectory);
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_scratch))
+        {
+            Directory.Delete(_scratch, recursive: true);
+        }
+    }
 
     [Fact]
     public void Construction_ReadsTheDragSettingAndStartupStatus()
@@ -260,15 +294,55 @@ public class SettingsViewModelTests
 
     /// <summary>
     /// NLog creates the log directory on first write, so on a run where logging failed - exactly when
-    /// a user is sent looking - it is not there yet. The command creates it first and must survive a
-    /// creation that is refused: an escape from a button click on the UI thread ends the process.
-    /// The path itself is the literal %LOCALAPPDATA%\Loadstone\Logs in both channels - MSIX does not
-    /// redirect file-system writes for this package - so the button is a convenience, not the only
-    /// honest way to name it.
+    /// a user is sent looking - it is not there yet. The command creates it first, so the shell has
+    /// something to open rather than beeping. The path itself is the literal %LOCALAPPDATA%\Loadstone\Logs
+    /// in both channels - MSIX does not redirect file-system writes for this package - so the button
+    /// is a convenience, not the only honest way to name it.
     /// </summary>
     [Fact]
-    public void OpenLogFolder_DoesNotThrow_EvenWhenTheDirectoryIsNotThereYet()
+    public void OpenLogFolder_CreatesTheDirectory_ThenHandsItToTheShell()
     {
+        Directory.Exists(_logDirectory).ShouldBeFalse();
+
+        NewViewModel().OpenLogFolderCommand.Execute(null);
+
+        Directory.Exists(_logDirectory).ShouldBeTrue();
+        _opened.ShouldBe([_logDirectory]);
+        _beeps.ShouldBe(0);
+    }
+
+    /// <summary>
+    /// A creation that is refused must not escape: a throw from a button click on the UI thread ends
+    /// the process and takes the hotkeys and the user's edge snapping with it. The shell still gets
+    /// the path, and answers for itself.
+    /// </summary>
+    [Fact]
+    public void OpenLogFolder_StillHandsThePathToTheShell_WhenTheDirectoryCannotBeCreated()
+    {
+        _logDirectory = Path.Combine(_scratch, "not<a>directory", "Logs");
+
         Should.NotThrow(() => NewViewModel().OpenLogFolderCommand.Execute(null));
+
+        _opened.ShouldBe([_logDirectory]);
+    }
+
+    /// <summary>A tray-only app has nowhere to show an error, so the beep is the whole failure report.</summary>
+    [Fact]
+    public void OpenLogFolder_BeepsWhenTheShellRefuses()
+    {
+        _shellOpens = false;
+
+        NewViewModel().OpenLogFolderCommand.Execute(null);
+
+        _beeps.ShouldBe(1);
+    }
+
+    [Fact]
+    public void OpenStartupApps_HandsTheSettingsUriToTheShell()
+    {
+        NewViewModel().OpenStartupAppsCommand.Execute(null);
+
+        _opened.ShouldBe(["ms-settings:startupapps"]);
+        _beeps.ShouldBe(0);
     }
 }
