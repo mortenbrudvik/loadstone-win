@@ -57,9 +57,8 @@ internal sealed class StartupSplash
 
     /// <summary>
     /// Fades the splash out once it has been up for <see cref="MinimumShown"/>, and completes when the
-    /// fade has finished. Never faults: the first run waits on this before opening Settings, and a
-    /// faulted task there would leave the user with no window at all instead of a splash that did not
-    /// fade.
+    /// fade has finished. Never faults: the caller discards the task, and a fault here would otherwise
+    /// become an unobserved-task exception instead of a splash that simply did not fade.
     /// </summary>
     public async Task CloseAsync(ILogger logger)
     {

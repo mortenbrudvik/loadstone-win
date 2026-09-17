@@ -160,9 +160,10 @@ public partial class App : Application
         // the dispatcher does not pump until it returns (see the single-instance note above), so an
         // await here would let a queued second launch build Settings from a half-finished container.
         // Queue it instead. The Settings window is only ever built on a user action, which cannot
-        // happen before this lands.
-        var splashClosed = splash?.CloseAsync(_logger) ?? Task.CompletedTask;
-        Defer(() => InitializeStartupAsync(services, settings, splashClosed));
+        // happen before this lands. CloseAsync never faults, so the discarded task is safe: a fault
+        // here would otherwise be the unobserved-task path Defer exists to close.
+        _ = splash?.CloseAsync(_logger);
+        Defer(() => InitializeStartupAsync(services));
     }
 
     /// <summary>
@@ -180,28 +181,14 @@ public partial class App : Application
     /// The deferred half of startup. Not everything below is guaranteed not to throw:
     /// <see cref="PackagedStartupRegistration.InitializeAsync"/> catches broadly by design, but
     /// <see cref="RegistryStartupRegistration.InitializeAsync"/> only catches registry refusals and
-    /// lets a genuine bug through, and <see cref="ShowSettings"/> builds a window. A throw here
-    /// reaches the dispatcher's fatal policy through <see cref="Defer"/>, the same as it would from a
-    /// tray click.
+    /// lets a genuine bug through. A throw here reaches the dispatcher's fatal policy through
+    /// <see cref="Defer"/>, the same as it would from a tray click.
     /// </summary>
-    private async Task InitializeStartupAsync(IServiceProvider services, ISettingsService settings, Task splashClosed)
+    private async Task InitializeStartupAsync(IServiceProvider services)
     {
         var startup = services.GetRequiredService<IStartupRegistration>();
         await startup.InitializeAsync();
         services.GetRequiredService<ILogger<App>>().LogInformation("launch at login: {Startup}", startup.Status);
-
-        // First run opens Settings so the drag-snapping toggle and its explanation are in front of the
-        // user before anything changes a Windows setting — and so a tray-only app has a window a Store
-        // reviewer can reach from the Start menu. Here rather than in OnStartup, so the launch-at-login
-        // row shows a state that has actually been read. ShowSettings uses Show(), never ShowDialog():
-        // a modal would run a nested dispatcher loop and defeat the ordering OnStartup depends on.
-        if (settings.IsFirstRun)
-        {
-            // Once the splash has gone: it is topmost, and would otherwise sit over the very window it
-            // hands over to. StartupSplash.CloseAsync never faults, so this cannot strand the first run.
-            await splashClosed;
-            ShowSettings();
-        }
     }
 
     protected override void OnExit(ExitEventArgs e)
