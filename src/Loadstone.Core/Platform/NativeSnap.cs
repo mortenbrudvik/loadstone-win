@@ -18,8 +18,12 @@ namespace Loadstone.Core.Platform;
 /// </remarks>
 public sealed class NativeSnap
 {
-    /// <summary>Every flag this class manages; adding a <see cref="NativeSnapFlag"/> is all it takes to manage one more.</summary>
-    public static IReadOnlyList<NativeSnapFlag> ManagedFlags { get; } = Enum.GetValues<NativeSnapFlag>();
+    /// <summary>
+    /// Every flag this class manages; adding a <see cref="NativeSnapFlag"/> is all it takes to manage one more.
+    /// Read-only for the same reason as <see cref="Commands.WindowCommands.All"/>: Enum.GetValues hands back
+    /// a plain array, and a caller who cast it back could overwrite the list for every other caller.
+    /// </summary>
+    public static IReadOnlyList<NativeSnapFlag> ManagedFlags { get; } = Array.AsReadOnly(Enum.GetValues<NativeSnapFlag>());
 
     private readonly INativeSnapFlags _native;
     private readonly INativeSnapMarker _marker;
@@ -145,6 +149,11 @@ public sealed class NativeSnap
             var captured = _captured;
             if (captured is null)
             {
+                // Drag snapping is off, or this process never captured. A marker can still be sitting
+                // there from a run that died after the setting was saved off and before the flags were
+                // put back — or from a restore write that failed. Reading it only on the way to
+                // suppressing would leave Windows' edge snapping off for good.
+                RecoverWithoutSuppressing();
                 return;
             }
 
@@ -162,9 +171,8 @@ public sealed class NativeSnap
                     continue;
                 }
 
-                if (!_native.Write(flag, value))
+                if (!PutBack(flag, value))
                 {
-                    _logger.LogError("could not restore Windows edge snapping flag {Flag} to {Value}; keeping it parked for the next launch", flag, value);
                     unrestored[flag] = value;
                 }
             }
@@ -268,7 +276,14 @@ public sealed class NativeSnap
     /// </remarks>
     private Dictionary<NativeSnapFlag, bool>? CaptureBaseline()
     {
-        var unrecovered = RecoverFromUncleanExit();
+        var unrecovered = RecoverFromUncleanExit(out var unreadable);
+        if (unreadable)
+        {
+            // The file is still the only record. Reading the live flags here would record the false
+            // a crashed run left behind, and writing that over the marker would make it permanent.
+            _logger.LogError("the crash marker could not be read; leaving Windows edge snapping alone for this run");
+            return null;
+        }
 
         var baseline = new Dictionary<NativeSnapFlag, bool>();
         foreach (var flag in ManagedFlags)
@@ -299,19 +314,47 @@ public sealed class NativeSnap
         return baseline;
     }
 
+    /// <summary>Puts a parked marker back without capturing a baseline and without turning anything off.</summary>
+    private void RecoverWithoutSuppressing()
+    {
+        var unrecovered = RecoverFromUncleanExit(out var unreadable);
+        if (unreadable)
+        {
+            return;
+        }
+
+        if (unrecovered.Count == 0)
+        {
+            if (!_marker.Write(null))
+            {
+                // Every flag is already back, so the next launch's recovery only rewrites what is there.
+                _logger.LogError("the crash marker could not be cleared after recovery; the next launch will recover from values that are already in place");
+                return;
+            }
+
+            ClearLegacyMarker();
+            return;
+        }
+
+        if (!_marker.Write(Park(unrecovered)))
+        {
+            _logger.LogError("the crash marker could not be narrowed to the flags that are still off; leaving the wider one parked");
+        }
+    }
+
     /// <summary>
     /// A run that crashed or was force-quit never reached Restore, so its marker is still parked and
     /// the user's flags are still off. Put them back before capturing a new baseline: capturing
     /// first would record Loadstone's own false as "what the user had" and make the change permanent.
-    /// A flag that reads true is left alone - the user has had the whole gap between the two runs to
-    /// turn it back on, and writing the parked false over that would make *their* change permanent.
+    /// A flag that reads true is left alone — the user has had the whole gap between the two runs to
+    /// turn it back on, and writing the parked false over that would make their change permanent.
     /// </summary>
     /// <returns>The flags whose recovery write failed and so still hold the wrong value.</returns>
-    private Dictionary<NativeSnapFlag, bool> RecoverFromUncleanExit()
+    private Dictionary<NativeSnapFlag, bool> RecoverFromUncleanExit(out bool unreadable)
     {
-        var stored = ReadMarker();
+        var stored = ReadMarker(out unreadable);
         var unrecovered = new Dictionary<NativeSnapFlag, bool>();
-        if (stored.Count == 0)
+        if (unreadable || stored.Count == 0)
         {
             return unrecovered;
         }
@@ -330,9 +373,8 @@ public sealed class NativeSnap
                 continue;
             }
 
-            if (!_native.Write(flag, value))
+            if (!PutBack(flag, value))
             {
-                _logger.LogError("could not restore Windows edge snapping flag {Flag} to {Value} after an unclean exit; keeping it as the baseline", flag, value);
                 unrecovered[flag] = value;
             }
         }
@@ -340,15 +382,44 @@ public sealed class NativeSnap
         return unrecovered;
     }
 
+    /// <summary>
+    /// Writes <paramref name="value"/> and keeps it only when a following read agrees. A write that
+    /// reports success without changing the flag — the way a BOOL passed in the wrong parameter
+    /// does — would otherwise drop the only record of what the user had.
+    /// </summary>
+    private bool PutBack(NativeSnapFlag flag, bool value)
+    {
+        var written = _native.Write(flag, value);
+        var read = _native.Read(flag);
+        if (written && read == value)
+        {
+            return true;
+        }
+
+        _logger.LogError(
+            "could not restore Windows edge snapping flag {Flag} to {Value}; the write returned {Written} and the flag now reads {Read}; keeping it parked",
+            flag, value, written, read);
+        return false;
+    }
+
     /// <summary>The parked values, narrowed to the flags this build knows.</summary>
     /// <remarks>
     /// Dropping an unrecognised name is not tidiness. It cannot be written back, so recovery would
     /// fail for it, the failure would carry it into the new baseline, and the baseline is parked
-    /// again - an error logged at every launch for the rest of the profile's life.
+    /// again — an error logged at every launch for the rest of the profile's life.
     /// </remarks>
-    private Dictionary<NativeSnapFlag, bool> ReadMarker()
+    private Dictionary<NativeSnapFlag, bool> ReadMarker(out bool unreadable)
     {
-        var stored = _marker.Read() ?? _settings.Current.NativeSnapPreviousValues;
+        var read = _marker.Read();
+        if (read.Unreadable)
+        {
+            // Do not fall back to the legacy key and then write over the file that could not be read.
+            unreadable = true;
+            return [];
+        }
+
+        unreadable = false;
+        var stored = read.Values ?? _settings.Current.NativeSnapPreviousValues;
         var known = new Dictionary<NativeSnapFlag, bool>();
         if (stored is null)
         {

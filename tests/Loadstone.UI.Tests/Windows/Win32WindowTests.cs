@@ -1,5 +1,6 @@
 using System.Windows;
 using Loadstone.Core.Commands;
+using Loadstone.UI.Interop;
 using Loadstone.UI.Windows;
 using Shouldly;
 using Xunit;
@@ -22,12 +23,12 @@ public class Win32WindowTests
         Loadstone.UI.Interop.NativeMethods.User32.GetWindowRect(test.Handle, out var outerRect).ShouldBeTrue();
         var outer = Displays.ToRect(outerRect);
 
-        visible.Width.ShouldBeLessThanOrEqualTo(outer.Width);
+        visible.Width.ShouldBeLessThan(outer.Width);
         visible.Height.ShouldBeLessThanOrEqualTo(outer.Height);
         var insets = Win32Window.Insets(outer, visible);
-        insets.Left.ShouldBeGreaterThanOrEqualTo(0);
+        insets.Left.ShouldBeGreaterThan(0);
         insets.Top.ShouldBeGreaterThanOrEqualTo(0);
-        insets.Right.ShouldBeGreaterThanOrEqualTo(0);
+        insets.Right.ShouldBeGreaterThan(0);
         insets.Bottom.ShouldBeGreaterThanOrEqualTo(0);
     }
 
@@ -37,6 +38,39 @@ public class Win32WindowTests
         using var test = new TestWindow();
         var window = Captured(test);
         var target = new Rect(200, 150, 601, 451);
+
+        window.SetFrame(target).ShouldBe(CommandOutcome.Moved);
+        TestWindow.Pump();
+
+        var landed = window.ReadFrame().ShouldNotBeNull();
+        Math.Abs(landed.X - target.X).ShouldBeLessThanOrEqualTo(1);
+        Math.Abs(landed.Y - target.Y).ShouldBeLessThanOrEqualTo(1);
+        Math.Abs(landed.Width - target.Width).ShouldBeLessThanOrEqualTo(1);
+        Math.Abs(landed.Height - target.Height).ShouldBeLessThanOrEqualTo(1);
+    }
+
+    /// <summary>
+    /// The second write exists because a per-monitor-aware window rescales itself when the first
+    /// write lands it on another DPI. A same-display target never takes that path.
+    /// </summary>
+    [WpfFact]
+    public void SetFrame_OnADifferentDpiMonitor_LandsTheVisibleFrameOnTheTarget()
+    {
+        var displays = Displays.Snapshot();
+        if (displays.Select(d => d.Dpi).Distinct().Count() < 2)
+        {
+            Assert.Skip("this machine has one DPI, so the follow-up write cannot be reached");
+        }
+
+        var other = displays.First(d => d.Dpi != displays[0].Dpi);
+        if (other.WorkArea.Width < 700 || other.WorkArea.Height < 550)
+        {
+            Assert.Skip("the other monitor is too small for the target");
+        }
+
+        using var test = new TestWindow();
+        var window = Captured(test);
+        var target = new Rect(other.WorkArea.X + 20, other.WorkArea.Y + 20, 601, 451);
 
         window.SetFrame(target).ShouldBe(CommandOutcome.Moved);
         TestWindow.Pump();
@@ -157,6 +191,7 @@ public class Win32WindowTests
 
         Win32Window.ProcessIdOf(handle).ShouldBeNull();
         Win32Window.For(handle).ShouldBeNull();
+        WindowStyles.StyleWord(handle, NativeConstants.GWL_STYLE).ShouldBeNull();
     }
 
     [WpfFact]

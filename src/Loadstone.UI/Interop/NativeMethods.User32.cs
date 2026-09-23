@@ -80,6 +80,10 @@ internal static partial class NativeMethods
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool GetCursorPos(out POINT lpPoint);
 
+        [LibraryImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
+
         [LibraryImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool RegisterHotKey(nint hWnd, int id, uint fsModifiers, uint vk);

@@ -84,7 +84,9 @@ public class WindowCommandTests
         WindowCommand.Restore.ToTile().ShouldBeNull();
         WindowCommand.NextDisplay.ToTile().ShouldBeNull();
         WindowCommand.PreviousDisplay.ToTile().ShouldBeNull();
-        WindowCommands.All.Count(c => c.ToTile() is not null).ShouldBe(Enum.GetValues<Tile>().Length);
+        var mapped = WindowCommands.All.Select(c => c.ToTile()).OfType<Tile>().ToList();
+        mapped.Count.ShouldBe(mapped.Distinct().Count());
+        mapped.OrderBy(t => t).ShouldBe(Enum.GetValues<Tile>().OrderBy(t => t));
     }
 
     [Fact]

@@ -164,6 +164,28 @@ public class SettingsWindowTests
         }
     }
 
+    [WpfFact]
+    public void Close_HidesAndCanBeShownAgain()
+    {
+        var window = ShownWindow(HotkeyStatus.Registered);
+        try
+        {
+            window.Close();
+            window.IsVisible.ShouldBeFalse();
+
+            window.Show();
+            window.IsVisible.ShouldBeTrue();
+
+            window.Close();
+            window.IsVisible.ShouldBeFalse();
+            Should.NotThrow(window.Show);
+        }
+        finally
+        {
+            window.Hide();
+        }
+    }
+
     /// <summary>
     /// ShowMaximize="False" only hides the button. With the maximize box still in the window style, a
     /// title-bar double-click or Win+Up maximized the 520 px window anyway. Resizing must survive:

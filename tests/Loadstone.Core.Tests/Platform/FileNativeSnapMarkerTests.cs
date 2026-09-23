@@ -37,7 +37,7 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
         marker.Write(new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = false }).ShouldBeTrue();
 
         // A fresh instance, not the one that wrote: the store is the file, not any in-memory copy.
-        NewMarker().Read().ShouldBe(new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = false });
+        NewMarker().Read().Values.ShouldBe(new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = false });
     }
 
     /// <summary>
@@ -55,7 +55,7 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
         marker.Write(parked).ShouldBeTrue();
 
         File.ReadAllText(MarkerPath).ShouldContain("\"DockMoving\": true");
-        foreach (var name in marker.Read().ShouldNotBeNull().Keys)
+        foreach (var name in marker.Read().Values.ShouldNotBeNull().Keys)
         {
             Enum.TryParse<NativeSnapFlag>(name, ignoreCase: true, out var flag).ShouldBeTrue($"{name} is not a NativeSnapFlag");
             Enum.IsDefined(flag).ShouldBeTrue($"{name} parsed to an undefined NativeSnapFlag");
@@ -63,9 +63,11 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
     }
 
     [Fact]
-    public void Read_NoMarkerFile_ReturnsNull()
+    public void Read_NoMarkerFile_IsMissing()
     {
-        NewMarker().Read().ShouldBeNull();
+        var read = NewMarker().Read();
+        read.Unreadable.ShouldBeFalse();
+        read.Values.ShouldBeNull();
         Directory.Exists(_directory).ShouldBeFalse("Read must not create anything");
     }
 
@@ -78,7 +80,9 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
         marker.Write(null).ShouldBeTrue();
 
         File.Exists(MarkerPath).ShouldBeFalse();
-        NewMarker().Read().ShouldBeNull();
+        var cleared = NewMarker().Read();
+        cleared.Unreadable.ShouldBeFalse();
+        cleared.Values.ShouldBeNull();
     }
 
     /// <summary>Restore clears the marker whether or not one was parked; nothing to delete is success.</summary>
@@ -89,10 +93,9 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
     }
 
     /// <summary>
-    /// A half-written or hand-mangled marker reads as "nothing parked" rather than throwing: this is
-    /// called during startup, and a throw here would cost the user the launch instead of one run's
-    /// recovery. Null is deliberately indistinguishable from an absent marker - both mean there is
-    /// nothing to put back.
+    /// A half-written or hand-mangled marker must not read as "nothing parked". That answer is what
+    /// lets the next capture overwrite the file with the flags the crashed run left off. It also
+    /// must not throw: this runs during startup, and a throw would cost the user the launch.
     /// </summary>
     [Theory]
     [InlineData("")]
@@ -100,13 +103,16 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
     [InlineData("{ this is not json")]
     [InlineData("{ \"DockMoving\": \"yes\" }")]
     [InlineData("null")]
-    public void Read_CorruptOrTruncatedFile_ReturnsNull(string contents)
+    public void Read_CorruptOrTruncatedFile_IsUnreadable_AndLeavesTheFile(string contents)
     {
         Directory.CreateDirectory(_directory);
         File.WriteAllText(MarkerPath, contents);
 
-        // A propagating exception fails the test here, before the assertion runs.
-        NewMarker().Read().ShouldBeNull();
+        var read = NewMarker().Read();
+
+        read.Unreadable.ShouldBeTrue();
+        read.Values.ShouldBeNull();
+        File.ReadAllText(MarkerPath).ShouldBe(contents);
     }
 
     /// <summary>
@@ -115,14 +121,18 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
     /// and cannot be provoked in-process.
     /// </summary>
     [Fact]
-    public void Read_UnreadableFile_ReturnsNull()
+    public void Read_UnreadableFile_IsUnreadable()
     {
         Directory.CreateDirectory(_directory);
         File.WriteAllText(MarkerPath, "{ \"DockMoving\": true }");
-        using var exclusive = new FileStream(MarkerPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        using (var exclusive = new FileStream(MarkerPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var read = NewMarker().Read();
+            read.Unreadable.ShouldBeTrue();
+            read.Values.ShouldBeNull();
+        }
 
-        // A propagating exception fails the test here, before the assertion runs.
-        NewMarker().Read().ShouldBeNull();
+        NewMarker().Read().Values.ShouldBe(new Dictionary<string, bool> { ["DockMoving"] = true });
     }
 
     /// <summary>
@@ -141,7 +151,9 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
         marker.Write(new Dictionary<string, bool> { ["DockMoving"] = true }).ShouldBeFalse();
 
         File.Exists(MarkerPath).ShouldBeFalse();
-        marker.Read().ShouldBeNull();
+        var read = marker.Read();
+        read.Unreadable.ShouldBeFalse();
+        read.Values.ShouldBeNull();
     }
 
     /// <summary>
@@ -158,7 +170,7 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
 
         marker.Write(new Dictionary<string, bool> { ["DockMoving"] = false }).ShouldBeFalse();
 
-        NewMarker().Read().ShouldBe(new Dictionary<string, bool> { ["DockMoving"] = true });
+        NewMarker().Read().Values.ShouldBe(new Dictionary<string, bool> { ["DockMoving"] = true });
     }
 
     [Fact]
@@ -169,7 +181,7 @@ public sealed class FileNativeSnapMarkerTests : IDisposable
 
         marker.Write(new Dictionary<string, bool> { ["SnapSizing"] = false }).ShouldBeTrue();
 
-        NewMarker().Read().ShouldBe(new Dictionary<string, bool> { ["SnapSizing"] = false });
+        NewMarker().Read().Values.ShouldBe(new Dictionary<string, bool> { ["SnapSizing"] = false });
     }
 
     [Fact]

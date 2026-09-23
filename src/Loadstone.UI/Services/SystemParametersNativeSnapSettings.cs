@@ -1,5 +1,8 @@
+using System.Runtime.InteropServices;
 using Loadstone.Core.Platform;
 using Loadstone.UI.Interop;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using static Loadstone.UI.Interop.NativeMethods;
 
 namespace Loadstone.UI.Services;
@@ -12,6 +15,13 @@ namespace Loadstone.UI.Services;
 /// </summary>
 internal sealed class SystemParametersNativeSnapSettings : INativeSnapFlags
 {
+    private readonly ILogger<SystemParametersNativeSnapSettings> _logger;
+
+    public SystemParametersNativeSnapSettings(ILogger<SystemParametersNativeSnapSettings>? logger = null)
+    {
+        _logger = logger ?? NullLogger<SystemParametersNativeSnapSettings>.Instance;
+    }
+
     /// <summary>
     /// The SystemParametersInfo actions behind one flag.
     /// </summary>
@@ -43,6 +53,13 @@ internal sealed class SystemParametersNativeSnapSettings : INativeSnapFlags
     public bool Write(NativeSnapFlag flag, bool value)
     {
         var actions = ActionsFor(flag);
-        return User32.SystemParametersInfoSet(actions.Set, value ? 1u : 0u, 0, NativeConstants.SPIF_SENDCHANGE);
+        if (User32.SystemParametersInfoSet(actions.Set, value ? 1u : 0u, 0, NativeConstants.SPIF_SENDCHANGE))
+        {
+            return true;
+        }
+
+        // Captured here: the caller's read-back overwrites the thread's last error.
+        _logger.LogError("could not write Windows edge snapping flag {Flag} (Win32 error {Error})", flag, Marshal.GetLastWin32Error());
+        return false;
     }
 }

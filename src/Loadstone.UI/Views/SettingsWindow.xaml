@@ -38,6 +38,14 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel DataContext="{Binding General}" Margin="0,12,0,0">
 
+            <ui:TextBlock
+                Margin="0,0,0,12"
+                Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                FontTypography="Caption"
+                TextWrapping="Wrap"
+                Text="{Binding SettingsFileMessage}"
+                Visibility="{Binding SettingsFileMessage, Converter={StaticResource StringToVisibilityConverter}}" />
+
             <ui:Card Margin="0,0,0,12">
               <StackPanel>
                 <ui:ToggleSwitch Content="Snap windows by dragging to screen edges" IsChecked="{Binding DragSnappingEnabled}" />

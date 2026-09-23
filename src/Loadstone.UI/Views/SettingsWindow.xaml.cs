@@ -107,7 +107,10 @@ internal partial class SettingsWindow : FluentWindow
 
     public ShortcutsViewModel Shortcuts { get; }
 
-    /// <summary>Brings the window to the front, re-reading the registry-backed state first.</summary>
+    /// <summary>
+    /// Brings the window to the front and shows the current <see cref="IStartupRegistration.Status"/>.
+    /// This read does not re-fetch a packaged startup task; <see cref="SettingsViewModel.RefreshStartupAsync"/> does.
+    /// </summary>
     public void ShowAndActivate()
     {
         General.RefreshStartup();

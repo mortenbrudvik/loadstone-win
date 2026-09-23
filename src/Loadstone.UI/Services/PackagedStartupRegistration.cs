@@ -32,7 +32,10 @@ internal sealed class PackagedStartupRegistration : IStartupRegistration
 
     private readonly ILogger<PackagedStartupRegistration> _logger;
 
-    /// <summary>Fetched once by <see cref="InitializeAsync"/>; null until then and if the fetch failed.</summary>
+    /// <summary>
+    /// The startup task from the latest <see cref="InitializeAsync"/>. Null until that first fetch
+    /// and when a fetch fails. A later <see cref="InitializeAsync"/> replaces it.
+    /// </summary>
     private StartupTask? _task;
 
     public PackagedStartupRegistration(ILogger<PackagedStartupRegistration> logger) => _logger = logger;

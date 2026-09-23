@@ -236,6 +236,25 @@ public sealed class SettingsServiceTests : IDisposable
 
         service.Current.DragSnappingEnabled.ShouldBeFalse();
         service.Current.Shortcuts.ShouldBeEmpty();
+        service.CanSave.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Update_WhenTheFileCouldNotBeRead_DoesNotOverwriteIt()
+    {
+        Directory.CreateDirectory(_directory);
+        var original = "{ \"shortcuts\": { \"leftHalf\": \"Ctrl+Alt+H\" } }";
+        File.WriteAllText(SettingsPath, original);
+        using (var exclusive = new FileStream(SettingsPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var service = NewService();
+            service.CanSave.ShouldBeFalse();
+
+            service.Update(s => s.DragSnappingEnabled = true).ShouldBeFalse();
+            service.Current.DragSnappingEnabled.ShouldBeTrue();
+        }
+
+        File.ReadAllText(SettingsPath).ShouldBe(original);
     }
 
     /// <summary>

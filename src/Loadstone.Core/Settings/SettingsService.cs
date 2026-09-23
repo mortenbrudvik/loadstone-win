@@ -22,6 +22,7 @@ public sealed class SettingsService : ISettingsService
     private readonly string _path;
     private readonly ILogger<SettingsService> _logger;
     private readonly Lock _lock = new();
+    private readonly bool _canSave;
 
     /// <summary>The mutable document. Only <see cref="Update"/> hands it out, and only inside the callback.</summary>
     private readonly AppSettings _current;
@@ -31,12 +32,14 @@ public sealed class SettingsService : ISettingsService
         _path = path;
         _logger = logger;
         IsFirstRun = !File.Exists(path);
-        _current = Load();
+        (_current, _canSave) = Load();
     }
 
     public IReadOnlyAppSettings Current => _current;
 
     public bool IsFirstRun { get; }
+
+    public bool CanSave => _canSave;
 
     /// <summary>
     /// Raised on the thread that called <see cref="Update"/>: nothing here marshals, and in production
@@ -51,6 +54,7 @@ public sealed class SettingsService : ISettingsService
         lock (_lock)
         {
             change(_current);
+            _current.Shortcuts ??= [];
             saved = Save();
         }
 
@@ -63,11 +67,12 @@ public sealed class SettingsService : ISettingsService
     /// not the app. At startup an escaping exception would be a crash before the tray exists, and this
     /// runs in the constructor, so <see cref="SecurityException"/> from a locked-down profile counts too.
     /// </summary>
-    private AppSettings Load()
+    /// <returns>The document, and whether a later save may replace the file. False only when the file existed and its bytes were never read.</returns>
+    private (AppSettings Settings, bool CanSave) Load()
     {
         if (!File.Exists(_path))
         {
-            return new AppSettings();
+            return (new AppSettings(), true);
         }
 
         try
@@ -78,7 +83,7 @@ public sealed class SettingsService : ISettingsService
             // would then dereference.
             loaded.Shortcuts ??= [];
 
-            return loaded;
+            return (loaded, true);
         }
         catch (JsonException ex)
         {
@@ -93,12 +98,13 @@ public sealed class SettingsService : ISettingsService
                 _logger.LogError(copyFailed, "settings.json could not be backed up to {Backup}", backup);
             }
 
-            return new AppSettings();
+            // The bytes were read and kept aside. Replacing the original with defaults is the recovery.
+            return (new AppSettings(), true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
         {
-            _logger.LogError(ex, "settings.json could not be read; using defaults for this run");
-            return new AppSettings();
+            _logger.LogError(ex, "settings.json could not be read; using defaults for this run and leaving the file untouched");
+            return (new AppSettings(), false);
         }
     }
 
@@ -109,6 +115,12 @@ public sealed class SettingsService : ISettingsService
     /// <returns>False when the change did not reach disk.</returns>
     private bool Save()
     {
+        if (!_canSave)
+        {
+            _logger.LogError("settings.json was not read this run; keeping the change in memory and leaving the file untouched");
+            return false;
+        }
+
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);

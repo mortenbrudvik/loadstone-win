@@ -40,7 +40,7 @@ internal sealed class DragSnapMonitor : IDisposable
     /// report reaches nobody - every drag stops snapping and the log says nothing at all.
     /// </remarks>
     public DragSnapMonitor(IMoveSizeEvents events, WindowDirector director, ISettingsService settings, ISnapPreview preview, ILogger<DragSnapMonitor> logger)
-        : this(events, director, settings, preview, logger, Displays.Source(logger), CursorPosition, ManageableWindow)
+        : this(events, director, settings, preview, logger, Displays.Source(logger), CursorPosition, hwnd => ManageableWindow(hwnd, logger))
     {
     }
 
@@ -293,6 +293,6 @@ internal sealed class DragSnapMonitor : IDisposable
         User32.GetCursorPos(out var point) ? new Point(point.X, point.Y) : null;
 
     /// <summary>The root of the window in the move loop, if Loadstone may manage it.</summary>
-    private static IMovableWindow? ManageableWindow(nint hwnd) =>
-        WindowStyles.ManageableRoot(hwnd, Environment.ProcessId) is { } root ? Win32Window.For(root) : null;
+    private static IMovableWindow? ManageableWindow(nint hwnd, ILogger logger) =>
+        WindowStyles.ManageableRoot(hwnd, Environment.ProcessId) is { } root ? Win32Window.For(root, logger) : null;
 }

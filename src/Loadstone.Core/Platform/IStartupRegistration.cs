@@ -17,10 +17,11 @@ public interface IStartupRegistration
     StartupStatus Status { get; }
 
     /// <summary>
-    /// One-time setup, run once per launch before <see cref="Status"/> is meaningful. The registry
-    /// implementation rewrites a Run value whose path has gone; the packaged one fetches the startup
-    /// task, which is the only asynchronous call in the seam and the reason the whole interface is
-    /// asynchronous. Never throws.
+    /// Setup before <see cref="Status"/> is meaningful, and again whenever Settings is shown.
+    /// The registry implementation rewrites a Run value whose path has gone and can still throw
+    /// anything that is not a registry refusal. The packaged one re-fetches the startup task and
+    /// never throws. Re-callable. The packaged fetch is the only asynchronous call in the seam
+    /// and the reason the whole interface is asynchronous.
     /// </summary>
     Task InitializeAsync();
 

@@ -54,9 +54,9 @@ public sealed class AppModule : Module
             builder.RegisterType<RegistryStartupRegistration>().As<IStartupRegistration>().SingleInstance();
         }
 
-        // Displays.Source and not Displays.Snapshot: the snapshot abandons the whole list when a
-        // monitor cannot be read, which turns every hotkey into a beep, and a source bound to no
-        // logger would leave the log the user is told to read with nothing in it about why.
+        // Displays.Source(logger), not the logger-less Snapshot(). Both abandon the whole list when a
+        // monitor cannot be read, which turns every hotkey into a beep. Source logs that abandon
+        // under WindowDirector, which is where a reader of the log looks for it.
         // The director reads the toggle when a command runs, and again on Changed: turning it off
         // collapses each window to its pre-Loadstone frame, which has to happen even if the toggle
         // goes back on before the next command. The handler does not write settings.

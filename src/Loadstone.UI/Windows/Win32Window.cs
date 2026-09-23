@@ -67,7 +67,8 @@ internal sealed class Win32Window : IMovableWindow
             return null;
         }
 
-        if (Dwmapi.DwmGetWindowAttributeRect(hwnd, NativeConstants.DWMWA_EXTENDED_FRAME_BOUNDS, out var extended, (uint)Marshal.SizeOf<RECT>()) == 0)
+        var hr = Dwmapi.DwmGetWindowAttributeRect(hwnd, NativeConstants.DWMWA_EXTENDED_FRAME_BOUNDS, out var extended, (uint)Marshal.SizeOf<RECT>());
+        if (hr == 0)
         {
             return Displays.ToRect(extended);
         }
@@ -75,11 +76,12 @@ internal sealed class Win32Window : IMovableWindow
         // The fallback is deliberate but it is not the same rectangle, and the consequence is visible:
         // Write derives the border insets by subtracting this frame from GetWindowRect, so on this
         // path they come out zero and the window lands about 7 px short on three sides — exactly the
-        // gap the DWM path exists to remove. Without this line "tiling looks slightly off in that one
-        // app" has nothing in the log to trace it to.
-        logger.LogDebug(
-            "window {Hwnd}: DWM extended frame bounds unavailable, using GetWindowRect; border insets will be zero and the tile will sit inside its target",
-            hwnd);
+        // gap the DWM path exists to remove. Warning, not debug: the drag path used to build this
+        // window with no logger, and a successful SetWindowPos then hid the miss entirely.
+        logger.LogWarning(
+            "window {Hwnd}: DWM extended frame bounds unavailable (HRESULT {HResult:X8}), using GetWindowRect; border insets will be zero and the tile will sit inside its target",
+            hwnd,
+            hr);
 
         return User32.GetWindowRect(hwnd, out var outer) ? Displays.ToRect(outer) : null;
     }
@@ -92,14 +94,17 @@ internal sealed class Win32Window : IMovableWindow
         }
 
         // SetWindowPos misbehaves on minimized and maximized windows: bring them back to normal first.
+        // ShowWindow's return is not a success bit, so the before-and-after state is the check.
+        var restored = false;
         if (User32.IsIconic(Hwnd) || User32.IsZoomed(Hwnd))
         {
             User32.ShowWindow(Hwnd, NativeConstants.SW_RESTORE);
+            restored = !User32.IsIconic(Hwnd) && !User32.IsZoomed(Hwnd);
         }
 
         if (ReadFrame() is not { } visible)
         {
-            return CommandOutcome.FrameUnreadable;
+            return MovedIfRestored(CommandOutcome.FrameUnreadable, restored);
         }
 
         // A window without a sizing frame is fixed-size: keep its size and centre it on the tile,
@@ -109,7 +114,7 @@ internal sealed class Win32Window : IMovableWindow
         // that never got tiled.
         if (WindowStyles.StyleWord(Hwnd, NativeConstants.GWL_STYLE) is not { } style)
         {
-            return CommandOutcome.FrameUnreadable;
+            return MovedIfRestored(CommandOutcome.FrameUnreadable, restored);
         }
 
         var fixedSize = (style & NativeConstants.WS_THICKFRAME) == 0;
@@ -118,21 +123,45 @@ internal sealed class Win32Window : IMovableWindow
         var first = Write(wanted);
         if (!first.IsMoved)
         {
-            return first;
+            return MovedIfRestored(first, restored);
         }
 
         // The DPI dance: a per-monitor-aware window that moved to a monitor with a different scale
         // resizes itself, so read back and write once more now that it lives there. Insets are
-        // recomputed because the border thickness changed with the DPI.
+        // recomputed because the border thickness changed with the DPI. The first write already
+        // moved the window, so a refused retry is still Moved: otherwise the restore ledger records
+        // nothing for a window that is no longer where it started.
         if (ReadFrame() is { } landed && landed != wanted)
         {
             var second = Write(wanted);
             if (!second.IsMoved)
             {
-                return second;
+                _logger.LogWarning(
+                    "window {Hwnd}: moved, but the follow-up write was refused ({Outcome}); keeping the first placement",
+                    Hwnd,
+                    second);
+                return CommandOutcome.Moved;
             }
         }
 
+        return CommandOutcome.Moved;
+    }
+
+    /// <summary>
+    /// A restore from maximized or minimized has already changed the window. Reporting the later
+    /// failure would leave Restore with no frame to put back.
+    /// </summary>
+    private CommandOutcome MovedIfRestored(CommandOutcome failure, bool restored)
+    {
+        if (!restored)
+        {
+            return failure;
+        }
+
+        _logger.LogWarning(
+            "window {Hwnd}: restored from maximized or minimized, then the tile could not be written ({Outcome}); recording the earlier frame so Restore can put it back",
+            Hwnd,
+            failure);
         return CommandOutcome.Moved;
     }
 

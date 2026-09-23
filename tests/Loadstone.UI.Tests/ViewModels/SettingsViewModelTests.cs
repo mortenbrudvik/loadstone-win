@@ -61,6 +61,23 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Construction_WhenSettingsCouldNotBeRead_SaysSo()
+    {
+        _settings.CanSave = false;
+        NewViewModel().SettingsFileMessage.ShouldBe("Settings could not be read, so changes this session stay in memory and will not be saved.");
+    }
+
+    [Fact]
+    public void DragSnapping_WhenTheSaveFails_SaysTheChangeWillNotLast()
+    {
+        _settings.SaveSucceeds = false;
+        var vm = NewViewModel();
+        vm.DragSnappingEnabled = true;
+        vm.SettingsFileMessage.ShouldBe("Settings could not be saved; this change applies until Loadstone quits.");
+        _settings.Current.DragSnappingEnabled.ShouldBeTrue();
+    }
+
+    [Fact]
     public void Construction_ReadsRestoreOneMoveAtATime()
     {
         _settings.Current.RestoreOneMoveAtATime = true;

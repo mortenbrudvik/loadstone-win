@@ -38,12 +38,13 @@ internal sealed class TrayController : IDisposable
     private readonly ContextMenu _menu = new();
     private readonly TaskbarIcon _icon;
     private readonly Action _applySystemTheme;
+    private readonly Func<WindowIdentity?> _foreground;
     private Icon? _trayIcon;
     private WindowIdentity? _capturedForeground;
     private bool _started;
 
     public TrayController(ICommandDispatcher dispatcher, HotkeyCenter hotkeys, ShellActions shell, ILogger<TrayController> logger)
-        : this(dispatcher, hotkeys, shell, logger, ApplicationThemeManager.ApplySystemTheme)
+        : this(dispatcher, hotkeys, shell, logger, ApplicationThemeManager.ApplySystemTheme, ForegroundIdentity)
     {
     }
 
@@ -53,13 +54,20 @@ internal sealed class TrayController : IDisposable
     /// after another test's window existed died of cross-thread access; the test checks the wiring
     /// and leaves the apply to WPF-UI.
     /// </summary>
-    internal TrayController(ICommandDispatcher dispatcher, HotkeyCenter hotkeys, ShellActions shell, ILogger<TrayController> logger, Action applySystemTheme)
+    internal TrayController(
+        ICommandDispatcher dispatcher,
+        HotkeyCenter hotkeys,
+        ShellActions shell,
+        ILogger<TrayController> logger,
+        Action applySystemTheme,
+        Func<WindowIdentity?>? foreground = null)
     {
         _dispatcher = dispatcher;
         _hotkeys = hotkeys;
         _shell = shell;
         _logger = logger;
         _applySystemTheme = applySystemTheme;
+        _foreground = foreground ?? ForegroundIdentity;
 
         Rebuild();
         _icon = new TaskbarIcon
@@ -144,8 +152,16 @@ internal sealed class TrayController : IDisposable
 
     private void OnTrayLeftMouseUp(object? sender, RoutedEventArgs e) => _shell.OpenSettings();
 
-    private void OnPreviewTrayContextMenuOpen(object? sender, RoutedEventArgs e) =>
-        _capturedForeground = FocusedWindow.Resolve() is { } hwnd ? Win32Window.For(hwnd)?.Identity : null;
+    private void OnPreviewTrayContextMenuOpen(object? sender, RoutedEventArgs e) => CaptureForeground();
+
+    /// <summary>The menu the icon opens. Tests invoke its items; the shell is what shows it.</summary>
+    internal ContextMenu Menu => _menu;
+
+    /// <summary>Same capture the icon's preview event runs, so a test can open the menu without a click.</summary>
+    internal void CaptureForeground() => _capturedForeground = _foreground();
+
+    private static WindowIdentity? ForegroundIdentity() =>
+        FocusedWindow.Resolve() is { } hwnd ? Win32Window.For(hwnd)?.Identity : null;
 
     private void OnBindingsChanged(object? sender, EventArgs e) => Rebuild();
 

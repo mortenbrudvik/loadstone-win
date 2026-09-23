@@ -17,8 +17,12 @@ namespace Loadstone.Core.Platform;
 /// </remarks>
 public interface INativeSnapMarker
 {
-    /// <summary>The parked values, or null when nothing is parked or the store could not be read.</summary>
-    IReadOnlyDictionary<string, bool>? Read();
+    /// <summary>
+    /// The parked values. <see cref="MarkerRead.Missing"/> when nothing is parked.
+    /// <see cref="MarkerRead.Failed"/> when the store exists but could not be read — the caller
+    /// must not replace it, or the next launch has nothing left to recover.
+    /// </summary>
+    MarkerRead Read();
 
     /// <summary>
     /// Parks <paramref name="values"/>, or clears the marker when they are null.

@@ -137,6 +137,27 @@ public class HotkeyCenterTests
     }
 
     [Fact]
+    public void SetShortcut_RetriesACommandThatWasBlocked()
+    {
+        // Right Half lost the chord to something else at startup. Changing an unrelated binding is
+        // what frees it when the something else was another Loadstone command, and nothing else
+        // retries until the next recording session.
+        var right = WindowCommand.RightHalf.DefaultShortcut();
+        _registrar.Register(WindowCommand.RightHalf, right).Returns(HotkeyStatus.InUse(1409));
+        var center = NewCenter();
+        center.Start();
+        center.StatusOf(WindowCommand.RightHalf).State.ShouldBe(HotkeyState.InUse);
+
+        _registrar.ClearReceivedCalls();
+        _registrar.Register(WindowCommand.RightHalf, right).Returns(HotkeyStatus.Registered);
+
+        center.SetShortcut(WindowCommand.LeftHalf, Shortcut.Parse("Ctrl+Alt+Shift+Left"));
+
+        _registrar.Received(1).Register(WindowCommand.RightHalf, right);
+        center.StatusOf(WindowCommand.RightHalf).State.ShouldBe(HotkeyState.Registered);
+    }
+
+    [Fact]
     public void SetShortcut_PersistsAndReregistersThatCommand()
     {
         var center = NewCenter();

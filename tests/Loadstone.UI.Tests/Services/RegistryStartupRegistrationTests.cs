@@ -13,9 +13,9 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
     private readonly string _root = Parent + @"\" + Guid.NewGuid().ToString("N");
     private string RunKey => _root + @"\Run";
     private string ApprovedKey => _root + @"\StartupApproved";
-    private const string Exe = @"C:\Program Files\Loadstone\Loadstone.exe";
+    private static readonly string Exe = Environment.ProcessPath ?? throw new InvalidOperationException("the test host has no path");
 
-    private RegistryStartupRegistration NewRegistration(string exe = Exe) => new(RunKey, ApprovedKey, exe);
+    private RegistryStartupRegistration NewRegistration(string? exe = null) => new(RunKey, ApprovedKey, exe ?? Exe);
 
     public void Dispose()
     {
@@ -42,6 +42,18 @@ public sealed class RegistryStartupRegistrationTests : IDisposable
             // DeleteSubKey refuses a key that has subkeys. Leaving the parent behind is harmless;
             // failing somebody else's teardown is not.
         }
+    }
+
+    [Fact]
+    public void Status_WhenTheExeIsGone_IsUnknown()
+    {
+        var registration = NewRegistration();
+        using (var run = Registry.CurrentUser.CreateSubKey(RunKey))
+        {
+            run.SetValue("Loadstone", @"C:\no\such\Loadstone.exe");
+        }
+
+        registration.Status.ShouldBe(StartupStatus.Unknown);
     }
 
     [Fact]

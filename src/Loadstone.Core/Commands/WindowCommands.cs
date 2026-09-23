@@ -61,12 +61,12 @@ public static class WindowCommands
     };
 
     /// <summary>
-    /// The menu and Shortcuts-tab title. This is the one command switch that is NOT self-enforcing:
-    /// the compiler cannot see that the outer <c>is { } tile</c> already handled every tile command,
-    /// so the inner switch needs a discard arm, and a new non-tile command would compile here and
-    /// throw at run time. It is safe only second-hand: <see cref="Id"/>, <see cref="Section"/>,
-    /// <see cref="ToTile"/> and <see cref="DefaultShortcut"/> have no discard arm and fail the build
-    /// first, so the throw below is unreachable in any build that succeeds.
+    /// The menu and Shortcuts-tab title. The compiler cannot see that <see cref="ToTile"/> already
+    /// handled every tile command, so this switch needs a discard arm. A new non-tile command that
+    /// is added to <see cref="Id"/>, <see cref="Section"/>, <see cref="ToTile"/> and
+    /// <see cref="DefaultShortcut"/> still compiles, then throws here the first time the tray menu
+    /// is built. <c>WindowCommandTests.Title_AnswersForEveryCommand_WithNoTwoAlike</c> is what catches
+    /// that, and <c>WindowDirector.Perform</c> has the same discard for the command itself.
     /// </summary>
     public static string Title(this WindowCommand command) => command.ToTile() is { } tile
         ? tile.Title()

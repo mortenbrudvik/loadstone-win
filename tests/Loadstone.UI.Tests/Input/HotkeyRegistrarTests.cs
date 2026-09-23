@@ -1,7 +1,10 @@
 using Loadstone.Core.Commands;
 using Loadstone.UI.Input;
+using Loadstone.UI.Interop;
+using Loadstone.UI.Tests.Windows;
 using Shouldly;
 using Xunit;
+using static Loadstone.UI.Interop.NativeMethods;
 
 namespace Loadstone.UI.Tests.Input;
 
@@ -76,6 +79,43 @@ public class HotkeyRegistrarTests
 
         other.Register(WindowCommand.LeftHalf, Obscure).ShouldBe(HotkeyStatus.Registered);
         other.Register(WindowCommand.RightHalf, second).State.ShouldBe(HotkeyState.InUse);
+    }
+
+    [WpfFact]
+    public void Register_APostedHotkey_RaisesHotkeyPressedForThatCommand()
+    {
+        using var registrar = new HotkeyRegistrar();
+        WindowCommand? raised = null;
+        registrar.HotkeyPressed += command => raised = command;
+        registrar.Register(WindowCommand.LeftHalf, Obscure).ShouldBe(HotkeyStatus.Registered);
+
+        User32.PostMessage(registrar.Handle, NativeConstants.WM_HOTKEY, (nint)WindowCommand.LeftHalf, 0).ShouldBeTrue();
+        TestWindow.Pump();
+        raised.ShouldBe(WindowCommand.LeftHalf);
+
+        raised = null;
+        User32.PostMessage(registrar.Handle, NativeConstants.WM_HOTKEY, 999, 0).ShouldBeTrue();
+        TestWindow.Pump();
+        raised.ShouldBeNull();
+    }
+
+    [WpfFact]
+    public void Register_WhenTheOldChordCannotBeReleased_DoesNotTakeTheNewOne()
+    {
+        using var registrar = new HotkeyRegistrar();
+        using var other = new HotkeyRegistrar();
+        registrar.Register(WindowCommand.LeftHalf, Obscure).ShouldBe(HotkeyStatus.Registered);
+
+        // Drop it in Windows without telling the registrar, so UnregisterHotKey fails while the
+        // registrar still believes it holds the id. Registering anyway would report the new chord
+        // and, on Vista and later, leave the old one live as well.
+        User32.UnregisterHotKey(registrar.Handle, (int)WindowCommand.LeftHalf).ShouldBeTrue();
+
+        var replacement = Obscure with { VirtualKey = VirtualKeys.F1 + 21 };
+        var status = registrar.Register(WindowCommand.LeftHalf, replacement);
+        status.State.ShouldBe(HotkeyState.NotReleased);
+
+        other.Register(WindowCommand.LeftHalf, replacement).ShouldBe(HotkeyStatus.Registered);
     }
 
     [WpfFact]

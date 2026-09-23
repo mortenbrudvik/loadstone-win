@@ -39,8 +39,8 @@ internal static class Displays
     /// <remarks>
     /// A monitor whose GetMonitorInfo fails abandons the whole snapshot rather than being dropped from
     /// it. A partial list is the more dangerous answer: WindowDirector falls back to displays[0] for a
-    /// window it cannot place, so a dropped secondary sends the user's window to the left half of the
-    /// *primary* and reports it moved, and turns Next Display into "only one display attached" on a
+    /// window it cannot place, so a dropped secondary applies the requested tile to the primary and
+    /// reports it moved, and turns Next Display into "only one display attached" on a
     /// two-monitor desk. An empty list at least beeps and says so.
     /// </remarks>
     public static IReadOnlyList<Display> Snapshot(ILogger logger)

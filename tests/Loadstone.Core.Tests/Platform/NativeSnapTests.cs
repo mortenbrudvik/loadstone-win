@@ -44,7 +44,10 @@ public class NativeSnapTests
         /// <summary>What Write reports. Set false to stand in for a write that never reached the store.</summary>
         public bool WriteSucceeds { get; set; } = true;
 
-        public IReadOnlyDictionary<string, bool>? Read() => Values;
+        /// <summary>The file is there and cannot be parsed or opened. Read must not be treated as empty.</summary>
+        public bool Unreadable { get; set; }
+
+        public MarkerRead Read() => Unreadable ? MarkerRead.Failed : new MarkerRead(Values, false);
 
         public bool Write(IReadOnlyDictionary<string, bool>? values)
         {
@@ -616,5 +619,61 @@ public class NativeSnapTests
     public void ManagedFlags_AreDockMovingAndSnapSizing()
     {
         NativeSnap.ManagedFlags.ShouldBe([NativeSnapFlag.DockMoving, NativeSnapFlag.SnapSizing]);
+        (NativeSnap.ManagedFlags as NativeSnapFlag[]).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Follow_WithDragSnappingOff_RestoresAMarkerLeftByAnUncleanExit()
+    {
+        // The setting was saved off, then the process died before the flags were put back. The next
+        // launch must still read the marker. Waiting until drag snapping is turned on never comes
+        // if the user leaves it off.
+        _settings.Current.DragSnappingEnabled = false;
+        _native.Values[NativeSnapFlag.DockMoving] = false;
+        _native.Values[NativeSnapFlag.SnapSizing] = false;
+        _marker.Values = new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = true };
+
+        var snap = NewNativeSnap();
+        snap.Follow();
+
+        _native.Values[NativeSnapFlag.DockMoving].ShouldBeTrue();
+        _native.Values[NativeSnapFlag.SnapSizing].ShouldBeTrue();
+        _marker.Values.ShouldBeNull();
+        snap.IsSuppressing.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Apply_On_WhenTheMarkerCannotBeRead_DoesNotSuppressOrReplaceIt()
+    {
+        var parked = new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = true };
+        _marker.Values = parked;
+        _marker.Unreadable = true;
+        _native.Values[NativeSnapFlag.DockMoving] = false;
+        _native.Values[NativeSnapFlag.SnapSizing] = false;
+
+        var snap = NewNativeSnap();
+        snap.Apply(dragSnappingEnabled: true);
+
+        _native.Writes.ShouldBeEmpty();
+        _native.Values[NativeSnapFlag.DockMoving].ShouldBeFalse();
+        _marker.Values.ShouldBe(parked);
+        snap.IsSuppressing.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Restore_WhenNotSuppressing_KeepsAFlagWhoseRecoveryWriteFailed()
+    {
+        _marker.Values = new Dictionary<string, bool> { ["DockMoving"] = true, ["SnapSizing"] = true };
+        _native.Values[NativeSnapFlag.DockMoving] = false;
+        _native.Values[NativeSnapFlag.SnapSizing] = false;
+        _native.Unwritable.Add(NativeSnapFlag.DockMoving);
+
+        var snap = NewNativeSnap();
+        snap.Restore();
+
+        _native.Values[NativeSnapFlag.SnapSizing].ShouldBeTrue();
+        _native.Values[NativeSnapFlag.DockMoving].ShouldBeFalse();
+        _marker.Values.ShouldBe(new Dictionary<string, bool> { ["DockMoving"] = true });
+        snap.IsSuppressing.ShouldBeFalse();
     }
 }

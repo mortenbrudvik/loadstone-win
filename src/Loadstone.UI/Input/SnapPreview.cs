@@ -113,8 +113,9 @@ internal sealed class SnapPreview : Window, ISnapPreview
             return;
         }
 
-        // The window is still parked at -10000, so there is no preview at all while the drop goes on
-        // to commit. Worth a line, but only one: this runs 60 times a second during a drag.
+        // A failure before the first successful place leaves the window at its initial off-screen
+        // position, so there is no preview. A later failure leaves the previous preview up. Worth a
+        // line, but only one: this runs 60 times a second during a drag.
         if (!_placementFailureLogged)
         {
             _placementFailureLogged = true;

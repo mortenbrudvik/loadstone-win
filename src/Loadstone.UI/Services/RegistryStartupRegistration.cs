@@ -26,6 +26,7 @@ internal sealed class RegistryStartupRegistration : IStartupRegistration
     public const string ValueName = "Loadstone";
 
     private readonly ILogger<RegistryStartupRegistration> _logger;
+    private bool _reportedMissingExe;
     private readonly string _runKeyPath;
     private readonly string _approvedKeyPath;
     private readonly string _exePath;
@@ -66,10 +67,26 @@ internal sealed class RegistryStartupRegistration : IStartupRegistration
             try
             {
                 using var run = Registry.CurrentUser.OpenSubKey(_runKeyPath);
-                if (run?.GetValue(ValueName) is not string)
+                if (run?.GetValue(ValueName) is not string current)
                 {
                     return StartupStatus.NotRegistered;
                 }
+
+                // A value whose exe is gone is not a login item. InitializeAsync rewrites it when it
+                // can; when that write was refused the toggle must not stay on.
+                var exe = ExePathIn(current);
+                if (!File.Exists(exe))
+                {
+                    if (!_reportedMissingExe)
+                    {
+                        _reportedMissingExe = true;
+                        _logger.LogError("launch at login points at {Path}, which is not on disk", exe);
+                    }
+
+                    return StartupStatus.Unknown;
+                }
+
+                _reportedMissingExe = false;
 
                 using var approved = Registry.CurrentUser.OpenSubKey(_approvedKeyPath);
                 return StartupApproval.IsDisabled(approved?.GetValue(ValueName) as byte[])

@@ -40,7 +40,15 @@ internal sealed class HotkeyRegistrar : IHotkeyRegistrar
     public HotkeyStatus Register(WindowCommand command, Shortcut shortcut)
     {
         var id = IdOf(command);
-        _ = Unregister(command);
+        var released = Unregister(command);
+        if (released.State == HotkeyState.NotReleased)
+        {
+            // Since Vista, registering the same window and id again keeps the old hotkey as well as
+            // the new one. RegisterHotKey would still succeed, and this method would report the new
+            // chord while the old one keeps moving windows in every application.
+            return released;
+        }
+
         if (User32.RegisterHotKey(Handle, id, (uint)shortcut.Modifiers | NativeConstants.MOD_NOREPEAT, (uint)shortcut.VirtualKey))
         {
             // Indexer rather than Add: an Unregister that Windows refused deliberately leaves the id

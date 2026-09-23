@@ -64,6 +64,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _logDirectory = logDirectory;
         LaunchAtLoginMessage = "";
         LaunchAtLoginActionMessage = "";
+        SettingsFileMessage = settings.CanSave
+            ? ""
+            : "Settings could not be read, so changes this session stay in memory and will not be saved.";
         WithoutSideEffects(() =>
         {
             DragSnappingEnabled = settings.Current.DragSnappingEnabled;
@@ -105,6 +108,10 @@ internal sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool ShowOpenStartupApps { get; set; }
 
+    /// <summary>Why a settings change did not reach disk, or empty when the file is fine.</summary>
+    [ObservableProperty]
+    public partial string SettingsFileMessage { get; set; }
+
     public string Version { get; } =
         Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
         ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
@@ -117,7 +124,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        _settings.Update(s => s.DragSnappingEnabled = value);
+        RememberSave(_settings.Update(s => s.DragSnappingEnabled = value));
     }
 
     partial void OnRestoreOneMoveAtATimeChanged(bool value)
@@ -127,7 +134,19 @@ internal sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        _settings.Update(s => s.RestoreOneMoveAtATime = value);
+        RememberSave(_settings.Update(s => s.RestoreOneMoveAtATime = value));
+    }
+
+    private void RememberSave(bool saved)
+    {
+        if (saved)
+        {
+            return;
+        }
+
+        SettingsFileMessage = _settings.CanSave
+            ? "Settings could not be saved; this change applies until Loadstone quits."
+            : "Settings could not be read, so changes this session stay in memory and will not be saved.";
     }
 
     /// <summary>
@@ -207,10 +226,13 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Re-reads the registry; the launch-at-login state lives there, not in settings.json. Only
-    /// <see cref="StartupStatus.Enabled"/> and <see cref="StartupStatus.DisabledInTaskManager"/> tick
-    /// the box: <see cref="StartupStatus.Unknown"/> means the key would not open, and a ticked box
-    /// the user cannot untick is a worse lie than an unticked one.
+    /// Shows the current <see cref="IStartupRegistration.Status"/>. The registry implementation reads
+    /// the key here; the packaged one shows the task cached by the last
+    /// <see cref="RefreshStartupAsync"/>, which is what re-fetches it.
+    /// <see cref="StartupStatus.Enabled"/>, <see cref="StartupStatus.DisabledInTaskManager"/> and
+    /// <see cref="StartupStatus.EnabledByPolicy"/> tick the box.
+    /// <see cref="StartupStatus.Unknown"/> means the state could not be read, and a ticked box the
+    /// user cannot untick is a worse lie than an unticked one.
     /// </summary>
     public void RefreshStartup()
     {

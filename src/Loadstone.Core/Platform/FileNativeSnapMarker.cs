@@ -37,24 +37,31 @@ public sealed class FileNativeSnapMarker : INativeSnapMarker
 
     /// <summary>
     /// Never throws: a marker that cannot be read costs the user this launch's recovery, and throwing
-    /// would cost them the launch. Null is indistinguishable from "nothing parked" on purpose - both
-    /// mean there is nothing to put back.
+    /// would cost them the launch. An unreadable file is not reported as "nothing parked" — that
+    /// answer is what lets the next capture overwrite it with the flags the crashed run left off.
     /// </summary>
-    public IReadOnlyDictionary<string, bool>? Read()
+    public MarkerRead Read()
     {
         if (!File.Exists(_path))
         {
-            return null;
+            return MarkerRead.Missing;
         }
 
         try
         {
-            return JsonSerializer.Deserialize<Dictionary<string, bool>>(File.ReadAllText(_path), JsonOptions);
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, bool>>(File.ReadAllText(_path), JsonOptions);
+            if (parsed is null)
+            {
+                _logger.LogError("the native snap marker at {Path} could not be read; leaving it for the next launch", _path);
+                return MarkerRead.Failed;
+            }
+
+            return new MarkerRead(parsed, false);
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or SecurityException)
         {
-            _logger.LogError(ex, "the native snap marker at {Path} could not be read; skipping recovery this launch", _path);
-            return null;
+            _logger.LogError(ex, "the native snap marker at {Path} could not be read; leaving it for the next launch", _path);
+            return MarkerRead.Failed;
         }
     }
 

@@ -1,9 +1,12 @@
 using System.IO;
 using System.Security;
+using System.Windows.Controls;
 using Loadstone.Core.Commands;
+using Loadstone.Core.Windows;
 using Loadstone.UI.Input;
 using Loadstone.UI.Interop;
 using Loadstone.UI.Services;
+using Loadstone.UI.Tests.Windows;
 using Loadstone.UI.Tray;
 using Loadstone.UI.Windows;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -65,6 +68,93 @@ public class TrayControllerTests
 
         Should.NotThrow(tray.Dispose);
     }
+
+    [WpfFact]
+    public void Menu_WithNothingCaptured_RunsAgainstWhateverIsForeground()
+    {
+        var dispatcher = Dispatcher();
+        using var hotkeys = Hotkeys(dispatcher);
+        var tray = new TrayController(dispatcher, hotkeys, new ShellActions(), NullLogger<TrayController>.Instance, () => { }, () => null);
+        try
+        {
+            tray.CaptureForeground();
+            LeftHalf(tray).Command.ShouldNotBeNull().Execute(null);
+
+            dispatcher.Received(1).Run(WindowCommand.LeftHalf);
+            dispatcher.DidNotReceive().Run(Arg.Any<WindowCommand>(), Arg.Any<WindowIdentity>());
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+    }
+
+    [WpfFact]
+    public void Menu_ActsOnTheWindowCapturedBeforeItOpened()
+    {
+        // Loadstone will not tile its own process, so the target has to already be someone else's
+        // foreground window. The dispatcher is a substitute: the click does not move it.
+        var hwnd = NativeMethods.User32.GetForegroundWindow();
+        if (hwnd == 0 || !WindowStyles.IsManageable(hwnd, Environment.ProcessId))
+        {
+            Assert.Skip("no foreign manageable window is in the foreground");
+        }
+
+        var identity = Win32Window.For(hwnd).ShouldNotBeNull().Identity;
+        var dispatcher = Dispatcher();
+        using var hotkeys = Hotkeys(dispatcher);
+        var tray = new TrayController(dispatcher, hotkeys, new ShellActions(), NullLogger<TrayController>.Instance, () => { }, () => identity);
+        try
+        {
+            tray.CaptureForeground();
+            LeftHalf(tray).Command.ShouldNotBeNull().Execute(null);
+
+            dispatcher.Received(1).Run(WindowCommand.LeftHalf, identity);
+            dispatcher.DidNotReceive().Run(WindowCommand.LeftHalf);
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+    }
+
+    [WpfFact]
+    public void Menu_SkipsACapturedWindowThatHasSinceClosed()
+    {
+        var test = new TestWindow();
+        var identity = Win32Window.For(test.Handle).ShouldNotBeNull().Identity;
+        test.Dispose();
+
+        var dispatcher = Dispatcher();
+        using var hotkeys = Hotkeys(dispatcher);
+        var tray = new TrayController(dispatcher, hotkeys, new ShellActions(), NullLogger<TrayController>.Instance, () => { }, () => identity);
+        try
+        {
+            tray.CaptureForeground();
+            LeftHalf(tray).Command.ShouldNotBeNull().Execute(null);
+
+            dispatcher.DidNotReceive().Run(Arg.Any<WindowCommand>(), Arg.Any<WindowIdentity>());
+            dispatcher.DidNotReceive().Run(Arg.Any<WindowCommand>());
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+    }
+
+    private static ICommandDispatcher Dispatcher() => Substitute.For<ICommandDispatcher>();
+
+    private static HotkeyCenter Hotkeys(ICommandDispatcher dispatcher)
+    {
+        var registrar = Substitute.For<IHotkeyRegistrar>();
+        registrar.Register(Arg.Any<WindowCommand>(), Arg.Any<Shortcut>()).Returns(HotkeyStatus.Registered);
+        var probe = Substitute.For<IKeyboardLayoutProbe>();
+        probe.CharacterTypedBy(Arg.Any<Shortcut>()).Returns((string?)null);
+        return new HotkeyCenter(registrar, new InMemorySettings(), dispatcher, probe, NullLogger<HotkeyCenter>.Instance);
+    }
+
+    private static MenuItem LeftHalf(TrayController tray) =>
+        tray.Menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Left Half"));
 
     /// <summary>
     /// A policy or an ACL can refuse an HKCU read, and the theme lookup runs from the constructor,

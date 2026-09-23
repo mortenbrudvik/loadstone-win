@@ -1,8 +1,12 @@
 using System.Windows;
 using System.Windows.Media;
 using Loadstone.UI.Input;
+using Loadstone.UI.Interop;
+using Loadstone.UI.Windows;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
+using Rect = Loadstone.Core.Geometry.Rect;
 
 namespace Loadstone.UI.Tests.Input;
 
@@ -36,5 +40,43 @@ public class SnapPreviewTests
         fill.G.ShouldBe(highlight.G);
         fill.B.ShouldBe(highlight.B);
         fill.A.ShouldBeGreaterThan((byte)56);
+    }
+
+    [WpfFact]
+    public void Show_IsClickThroughAndTopmost()
+    {
+        var preview = new SnapPreview(NullLogger<SnapPreview>.Instance);
+        try
+        {
+            preview.Show(new Rect(80, 80, 400, 300));
+
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(preview).Handle;
+            var exStyle = WindowStyles.StyleWord(hwnd, NativeConstants.GWL_EXSTYLE).ShouldNotBeNull();
+            (exStyle & NativeConstants.WS_EX_TRANSPARENT).ShouldNotBe(0);
+            (exStyle & NativeConstants.WS_EX_NOACTIVATE).ShouldNotBe(0);
+            (exStyle & NativeConstants.WS_EX_TOOLWINDOW).ShouldNotBe(0);
+        }
+        finally
+        {
+            preview.Close();
+        }
+    }
+
+    [WpfFact]
+    public void Show_TileSmallerThanTheInset_Hides()
+    {
+        var preview = new SnapPreview(NullLogger<SnapPreview>.Instance);
+        try
+        {
+            preview.Show(new Rect(80, 80, 400, 300));
+            preview.IsVisible.ShouldBeTrue();
+
+            preview.Show(new Rect(80, 80, 10, 10));
+            preview.IsVisible.ShouldBeFalse();
+        }
+        finally
+        {
+            preview.Close();
+        }
     }
 }

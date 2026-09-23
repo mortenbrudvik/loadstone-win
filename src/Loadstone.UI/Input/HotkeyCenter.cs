@@ -103,7 +103,18 @@ internal sealed class HotkeyCenter : IDisposable
                 s.Shortcuts[id] = shortcut.ToString();
             }
         });
+
+        // RegisterOne only touches this command. A sibling that lost the race for the chord it
+        // shares stays InUse until something retries it, which used to be the next recording
+        // session or the next launch — and the row then said another app held a chord Loadstone
+        // had just freed.
+        var blocked = WindowCommands.All.Where(other => other != command && StatusOf(other).State == HotkeyState.InUse).ToArray();
         RegisterOne(command);
+        foreach (var waiting in blocked)
+        {
+            RegisterOne(waiting);
+        }
+
         BindingsChanged?.Invoke(this, EventArgs.Empty);
     }
 

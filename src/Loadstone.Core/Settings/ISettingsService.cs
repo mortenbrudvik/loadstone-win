@@ -6,11 +6,17 @@ public interface ISettingsService
     IReadOnlyAppSettings Current { get; }
 
     /// <summary>
-    /// True when there was no settings file to load, i.e. this is the first launch on this profile.
-    /// Not persisted: the file's own existence is the fact, and a flag would have to be written
-    /// before the user had agreed to anything.
+    /// True when no settings file existed at construction. A later <see cref="Update"/> that creates
+    /// the file does not clear it, and a launch that saves nothing leaves the file absent, so the
+    /// next launch is still first-run. Not persisted: the file's own existence is the fact.
     /// </summary>
     bool IsFirstRun { get; }
+
+    /// <summary>
+    /// False when settings.json existed but could not be read. <see cref="Update"/> then keeps the
+    /// change in memory and leaves the file untouched. A missing file is true: there is nothing to preserve.
+    /// </summary>
+    bool CanSave { get; }
 
     /// <summary>Applies <paramref name="change"/> to <see cref="Current"/>, saves, and raises <see cref="Changed"/>.</summary>
     /// <returns>

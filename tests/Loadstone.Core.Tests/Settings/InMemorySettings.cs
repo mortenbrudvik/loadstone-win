@@ -13,6 +13,9 @@ public sealed class InMemorySettings : ISettingsService
     /// <summary>What IsFirstRun reports. Default false: most tests are not exercising first run.</summary>
     public bool IsFirstRun { get; set; }
 
+    /// <summary>What CanSave reports. Default true: the document was read, or there was no file.</summary>
+    public bool CanSave { get; set; } = true;
+
     public int UpdateCount { get; private set; }
 
     /// <summary>What Update reports. Set false to stand in for a save that never reached disk.</summary>

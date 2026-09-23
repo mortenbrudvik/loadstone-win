@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
 using Autofac;
@@ -116,14 +117,14 @@ public partial class App : Application
         shell.OpenSettingsAction = ShowSettings;
         shell.QuitAction = Shutdown;
 
-        // A logoff or a restart ends the process without ever reaching OnExit.
+        // Logoff or restart often skips OnExit. SessionEnding restores in case it does; OnExit
+        // restores again when it still runs. Restore is idempotent when both do.
         SystemEvents.SessionEnding += RestoreOnSessionEnd;
 
         // Order matters, as on the Mac: whatever Follow() settles on has to be in place before the
-        // first drag can happen, monitors last. Not unconditional suppression - DragSnappingEnabled
-        // defaults to false, so on an ordinary first run Follow() turns nothing off and only puts back
-        // what an unclean exit left off. It is the run where consent is already given that needs this
-        // order.
+        // first drag can happen, monitors last. DragSnappingEnabled defaults to false, so an ordinary
+        // first run turns nothing off. Follow still puts back a crash marker on that path: recovery
+        // is not reserved for the run where drag snapping is already on.
         nativeSnap.Follow();
         services.GetRequiredService<TrayController>().Start();
         services.GetRequiredService<HotkeyCenter>().Start();
@@ -159,9 +160,10 @@ public partial class App : Application
         // Package identity has to be asked over an asynchronous WinRT call and OnStartup cannot await:
         // the dispatcher does not pump until it returns (see the single-instance note above), so an
         // await here would let a queued second launch build Settings from a half-finished container.
-        // Queue it instead. The Settings window is only ever built on a user action, which cannot
-        // happen before this lands. CloseAsync never faults, so the discarded task is safe: a fault
-        // here would otherwise be the unobserved-task path Defer exists to close.
+        // Queue the init instead. That second launch can still build Settings before the init runs,
+        // because the show-Settings listener is already registered, which is why ShowSettings queues
+        // its own refresh. CloseAsync never faults, so the discarded task is safe: a fault here would
+        // otherwise be the unobserved-task path Defer exists to close.
         _ = splash?.CloseAsync(_logger);
         Defer(() => InitializeStartupAsync(services));
     }
@@ -313,8 +315,16 @@ public partial class App : Application
             // is looking at and its taskbar button flashes instead. The tray path never needed it -
             // the shell grants foreground rights to the owner of a notification icon the user has
             // just clicked - which is why only this path is broken.
-            User32.AllowSetForegroundWindow(NativeConstants.ASFW_ANY);
-            showSettings.Set();
+            if (!User32.AllowSetForegroundWindow(NativeConstants.ASFW_ANY))
+            {
+                NLog.Common.InternalLogger.Error(
+                    $"AllowSetForegroundWindow failed (Win32 error {Marshal.GetLastWin32Error()}); the running instance may open Settings behind the foreground window.");
+            }
+
+            if (!showSettings.Set())
+            {
+                NLog.Common.InternalLogger.Error("the show-Settings event could not be signaled; Settings will not open.");
+            }
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
         {
@@ -371,10 +381,10 @@ public partial class App : Application
     private void OnSettingsChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(SyncNativeSnapToDragMonitor);
 
     /// <summary>
-    /// A logoff or restart never reaches <see cref="OnExit"/>. The crash marker would put the flags
-    /// back at the next launch, but a user who logs off and then uninstalls never gets that launch
-    /// and keeps Windows' edge snapping off for good. Restore is idempotent, so the OnExit that may
-    /// still follow costs nothing.
+    /// Logoff or restart often ends the process without <see cref="OnExit"/>, and <see cref="OnExit"/>
+    /// may still run afterwards. Either call can be the only restore: a user who logs off and then
+    /// uninstalls never gets another launch, and Windows' edge snapping would stay off. Restore is
+    /// idempotent when both run.
     /// </summary>
     private void RestoreOnSessionEnd(object? sender, SessionEndingEventArgs e)
     {
@@ -419,14 +429,31 @@ public partial class App : Application
     /// </summary>
     private void Fatal(Exception? ex, string message)
     {
-        _logger?.LogCritical(ex, message);
+        if (_logger is null)
+        {
+            // The handlers are installed before the host exists. Flushing NLog then writes nothing,
+            // because the file target is not configured yet. The internal log is.
+            NLog.Common.InternalLogger.Error(ex, "fatal before the logger existed: " + message);
+        }
+        else
+        {
+            _logger.LogCritical(ex, message);
+        }
+
         try
         {
             RestoreNativeSnap();
         }
         catch (Exception restoreFailed)
         {
-            _logger?.LogError(restoreFailed, "could not restore Windows edge snapping while crashing");
+            if (_logger is null)
+            {
+                NLog.Common.InternalLogger.Error(restoreFailed, "could not restore Windows edge snapping while crashing");
+            }
+            else
+            {
+                _logger.LogError(restoreFailed, "could not restore Windows edge snapping while crashing");
+            }
         }
 
         NLog.LogManager.Flush(LogFlushTimeout);
