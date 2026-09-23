@@ -133,9 +133,9 @@ public class SettingsWindowTests
             var toggle = Descendants<Wpf.Ui.Controls.ToggleSwitch>(window)
                 .Single(candidate => candidate.Content as string == "Restore one move at a time");
             toggle.IsChecked.ShouldBe(false);
-            Descendants<TextBlock>(window)
-                .Any(caption => caption.Text.Contains("steps back one move", StringComparison.Ordinal))
-                .ShouldBeTrue();
+            var caption = Descendants<TextBlock>(window)
+                .Single(block => block.Text.Contains("steps back one move", StringComparison.Ordinal));
+            caption.Text.ShouldContain("by default");
         }
         finally
         {

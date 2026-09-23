@@ -66,7 +66,7 @@
                     Appearance="Secondary"
                     FontTypography="Caption"
                     TextWrapping="Wrap"
-                    Text="Off, Restore (Ctrl+Alt+Backspace) jumps back to where the window was before Loadstone first moved it. On, each press steps back one move — hotkey or drag snap — until that original spot." />
+                    Text="Off, Restore (Ctrl+Alt+Backspace by default) jumps back to where the window was before Loadstone first moved it. On, each press steps back one move — hotkey or drag snap — until that original spot." />
               </StackPanel>
             </ui:Card>
 

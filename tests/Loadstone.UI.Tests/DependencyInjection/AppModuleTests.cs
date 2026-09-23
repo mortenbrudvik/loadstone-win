@@ -64,7 +64,9 @@ public sealed class AppModuleTests
     /// <summary>
     /// Turning the toggle off has to reach the director immediately. Perform also re-reads the
     /// setting, so a missing subscription still steps back on the next command; what it cannot do
-    /// is collapse when the toggle goes off and back on with no command in between.
+    /// is drop the in-between frames when the toggle goes off and back on with no command in
+    /// between. Both frames are still stacked when the toggle flips: restoring first would leave
+    /// a one-frame stack, and dropping that stack would look the same as leaving it.
     /// </summary>
     [WpfFact]
     public void Load_DirectorFollowsRestoreOneMoveAtATime()
@@ -97,15 +99,12 @@ public sealed class AppModuleTests
         director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
         TestWindow.Pump();
 
-        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
-        TestWindow.Pump();
-        LandedOn(window.ReadFrame(), left);
-
         settings.Update(s => s.RestoreOneMoveAtATime = false);
         settings.Update(s => s.RestoreOneMoveAtATime = true);
         director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
         TestWindow.Pump();
         LandedOn(window.ReadFrame(), start);
+        FarFrom(window.ReadFrame(), left);
         director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
     }
 
@@ -116,5 +115,15 @@ public sealed class AppModuleTests
         Math.Abs(landed.Y - expected.Y).ShouldBeLessThanOrEqualTo(1);
         Math.Abs(landed.Width - expected.Width).ShouldBeLessThanOrEqualTo(1);
         Math.Abs(landed.Height - expected.Height).ShouldBeLessThanOrEqualTo(1);
+    }
+
+    private static void FarFrom(Rect? actual, Rect other)
+    {
+        var landed = actual.ShouldNotBeNull();
+        var apart = Math.Abs(landed.X - other.X) > 1
+            || Math.Abs(landed.Y - other.Y) > 1
+            || Math.Abs(landed.Width - other.Width) > 1
+            || Math.Abs(landed.Height - other.Height) > 1;
+        apart.ShouldBeTrue();
     }
 }

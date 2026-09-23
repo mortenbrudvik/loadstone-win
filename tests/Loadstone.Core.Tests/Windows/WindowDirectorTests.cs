@@ -43,13 +43,14 @@ public class WindowDirectorTests
     }
 
     [Fact]
-    public void Perform_ReadsTheFrameExactlyOnce()
+    public void Perform_SamplesTheFrameOnce_ThenReadsAgainAfterTheWrite()
     {
         // ReadFrame is a method because it is two or three Win32 calls and answers differently between
-        // reads while the window is moving; every branch must work from the one sample taken up front.
+        // reads while the window is moving. The placement is decided from the one sample taken up
+        // front. The second read is after the write, and only answers whether the visible frame changed.
         var window = new FakeWindow(Start);
         NewDirector().Perform(WindowCommand.NextDisplay, window).ShouldBe(CommandOutcome.Moved);
-        window.Reads.ShouldBe(1);
+        window.Reads.ShouldBe(2);
     }
 
     [Fact]
@@ -195,6 +196,70 @@ public class WindowDirectorTests
     }
 
     [Fact]
+    public void Restore_OneMoveAtATime_SameCommandTwice_StepsBackOnce()
+    {
+        var window = new FakeWindow(Start);
+        var director = NewDirector(() => true);
+        director.Perform(WindowCommand.LeftHalf, window);
+        var left = window.Frame!.Value;
+        director.Perform(WindowCommand.LeftHalf, window);
+        window.Frame.ShouldBe(left);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
+    }
+
+    [Fact]
+    public void Restore_OneMoveAtATime_UnchangedVisibleFrame_DoesNotPush_WhenTheRequestDiffers()
+    {
+        // The second press asks for the whole tile again. A fixed-size window already centered
+        // there reports Moved and stays put, so the request and the visible frame are different
+        // rectangles. Comparing the request would store a step that does not move the window.
+        var window = new FakeWindow(Start);
+        var director = NewDirector(() => true);
+        director.Perform(WindowCommand.LeftHalf, window);
+        var centered = new Rect(10, 10, 50, 50);
+        window.Frame = centered;
+        window.HoldFrame = true;
+        director.Perform(WindowCommand.LeftHalf, window).ShouldBe(CommandOutcome.Moved);
+        window.Writes[^1].ShouldNotBe(centered);
+        window.HoldFrame = false;
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
+    }
+
+    [Fact]
+    public void Perform_AlreadyOnTheTile_LeavesNothingToRestore()
+    {
+        var left = Tile.LeftHalf.Frame(Primary.WorkArea);
+        var window = new FakeWindow(left);
+        var director = NewDirector();
+        director.Perform(WindowCommand.LeftHalf, window).ShouldBe(CommandOutcome.Moved);
+        director.RememberedWindowCount.ShouldBe(0);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
+        window.Frame.ShouldBe(left);
+    }
+
+    [Fact]
+    public void ApplyRestoreMode_WhileOneMoveStaysOn_KeepsTheSteps()
+    {
+        // Changed fires for every settings write. Re-reading the toggle while it is still on
+        // must not throw away the in-between frames.
+        var window = new FakeWindow(Start);
+        var director = NewDirector(() => true);
+        director.Perform(WindowCommand.LeftHalf, window);
+        var left = window.Frame!.Value;
+        director.Perform(WindowCommand.TopRight, window);
+        director.ApplyRestoreMode();
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(left);
+    }
+
+    [Fact]
     public void Restore_OneMoveAtATime_IncludesADragSnap()
     {
         var window = new FakeWindow(Start);
@@ -235,8 +300,7 @@ public class WindowDirectorTests
     public void Restore_OneMoveAtATime_TurnedOff_CollapsesToTheOriginalFrame()
     {
         // Turning the setting off has to forget the in-between frames even when it is turned
-        // straight back on, before any further command. Otherwise the next Restore would still
-        // step, and "off" would not mean the pre-Loadstone position.
+        // straight back on, before any further command. The window stays put until Restore.
         var oneMove = true;
         var window = new FakeWindow(Start);
         var director = NewDirector(() => oneMove);

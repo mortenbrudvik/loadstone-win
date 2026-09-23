@@ -16,6 +16,14 @@ public sealed class FakeWindow : IMovableWindow
     public WindowIdentity Identity { get; }
     public Rect? Frame { get; set; }
     public CommandOutcome NextOutcome { get; set; } = CommandOutcome.Moved;
+
+    /// <summary>
+    /// A Moved write reports success but leaves <see cref="Frame"/> alone. That is a fixed-size
+    /// window already sitting where the command would put it: the write is accepted and the
+    /// visible frame does not change.
+    /// </summary>
+    public bool HoldFrame { get; set; }
+
     public List<Rect> Writes { get; } = [];
 
     /// <summary>How many times the director read the frame; ReadFrame is a method because it is not free.</summary>
@@ -30,7 +38,7 @@ public sealed class FakeWindow : IMovableWindow
     public CommandOutcome SetFrame(Rect frame)
     {
         Writes.Add(frame);
-        if (NextOutcome.IsMoved)
+        if (NextOutcome.IsMoved && !HoldFrame)
         {
             Frame = frame;
         }

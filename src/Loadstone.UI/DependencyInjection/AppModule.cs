@@ -58,8 +58,9 @@ public sealed class AppModule : Module
         // monitor cannot be read, which turns every hotkey into a beep. Source logs that abandon
         // under WindowDirector, which is where a reader of the log looks for it.
         // The director reads the toggle when a command runs, and again on Changed: turning it off
-        // collapses each window to its pre-Loadstone frame, which has to happen even if the toggle
-        // goes back on before the next command. The handler does not write settings.
+        // reduces each window's remembered stack to its oldest frame, which has to happen even if
+        // the toggle goes back on before the next command. The window stays where it is until
+        // Restore. The handler does not write settings.
         builder.Register(c =>
         {
             var settings = c.Resolve<ISettingsService>();

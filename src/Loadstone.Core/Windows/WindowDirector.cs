@@ -5,7 +5,7 @@ namespace Loadstone.Core.Windows;
 
 /// <summary>
 /// Runs a <see cref="WindowCommand"/> on an <see cref="IMovableWindow"/>. Keeps the restore ledger:
-/// the frames to put back, recorded only after a window accepts a write. With one-move restore off
+/// the frames to put back, recorded only after a write that changes the visible frame. With one-move restore off
 /// (the default) that is the pre-Loadstone frame, kept once and dropped by Restore. With it on, each
 /// accepted move pushes the frame from just before that move, and Restore steps back one.
 /// </summary>
@@ -43,9 +43,10 @@ public sealed class WindowDirector
     public int RememberedWindowCount => _frames.Count;
 
     /// <summary>
-    /// Re-reads <c>restoreOneMoveAtATime</c>. Turning it off collapses each window to its oldest
-    /// frame, which is the pre-Loadstone position, and that happens here rather than on the next
-    /// command: the setting can go off and back on with no command in between.
+    /// Re-reads <c>restoreOneMoveAtATime</c>. Turning it off reduces each window's remembered
+    /// stack to its oldest frame, the pre-Loadstone position. The window stays where it is until
+    /// Restore. The reduction happens here rather than on the next command: the setting can go
+    /// off and back on with no command in between.
     /// </summary>
     public void ApplyRestoreMode() => SyncMode();
 
@@ -184,8 +185,9 @@ public sealed class WindowDirector
 
     /// <summary>
     /// Writes <paramref name="frame"/>, then records <paramref name="remembering"/> as the frame Restore
-    /// should return to, but only once the window has accepted the write. Recording afterwards is what
-    /// keeps a refused frame, or a command that never ran, from leaving behind a restore entry.
+    /// should return to, but only once the window has accepted the write and the visible frame
+    /// changed. Recording afterwards is what keeps a refused frame, or a command that never ran,
+    /// from leaving behind a restore entry.
     /// </summary>
     private CommandOutcome Apply(Rect frame, IMovableWindow window, Rect? remembering)
     {
@@ -195,7 +197,12 @@ public sealed class WindowDirector
             return outcome;
         }
 
-        if (remembering is { } previous)
+        // A write can report Moved when the visible frame is already the one asked for: the same
+        // tile again, or a fixed-size window already centered in it. That must not become an undo
+        // step. The placement above used the sample taken at the start of the command; this read
+        // is only the frame the write left behind. A failed re-read still records, because losing
+        // the step is worse than keeping one.
+        if (remembering is { } previous && window.ReadFrame() != previous)
         {
             Remember(window.Identity, previous);
         }
@@ -234,13 +241,14 @@ public sealed class WindowDirector
         var enabled = _restoreOneMoveAtATime();
         if (_oneMoveAtATime && !enabled)
         {
-            CollapseToOldest();
+            ReduceToOldestFrame();
         }
 
         _oneMoveAtATime = enabled;
     }
 
-    private void CollapseToOldest()
+    /// <summary>Drops every remembered frame but the oldest. Does not move the window.</summary>
+    private void ReduceToOldestFrame()
     {
         foreach (var stack in _frames.Values)
         {
