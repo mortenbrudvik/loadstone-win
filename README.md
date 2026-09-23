@@ -23,7 +23,7 @@ Loadstone sits in the tray and stays out of the way. When you need two documents
 - **Halves** — left, right, top, bottom
 - **Corners** — four quarters
 - **Thirds** — left, center, right, plus two-thirds
-- **Maximize, center, restore** — restore puts the window back where it was before Loadstone first moved it
+- **Maximize, center, restore** — restore puts the window back where it was before Loadstone first moved it. Settings → General → **Restore one move at a time** makes each press step back one move instead, including a drag snap
 - **Drag to snap** — edges for halves, corners for quarters, top to maximize, bottom for thirds. Only a window that is actually being moved snaps; selecting text or resizing near an edge does nothing
 - **Multi-display** — send a window to the next or previous display, walking displays left to right as they sit on the desk. The window keeps the place and the proportion of the work area it had, so a half stays a half. The mapping is by pixel size, not DPI: on a display with the same pixel dimensions but heavier scaling, the window keeps its pixel size and so looks physically smaller
 - **Custom shortcuts** — Magnet-style defaults, all editable, with a warning when a chord is taken by another app or types a character on your keyboard layout
@@ -116,7 +116,7 @@ Tray → Loadstone → **Loadstone Help** opens <https://mortenbrudvik.github.io
 
 **Dragging to an edge does not snap.** Drag by the title bar; the window has to move before Loadstone treats the gesture as a window drag. On the edge between two displays the pointer passes straight through, so slow down and release while the preview is showing. If Windows' own Snap Layouts flyout appears at the top edge, turn it off under Settings → System → Multitasking → Snap windows.
 
-**Restore does nothing.** Restore is one-shot: it puts the window back where it was before Loadstone first moved it, then forgets. The next Loadstone command starts a new memory. The memory is also dropped when the window closes or Loadstone restarts.
+**Restore does nothing.** Restore remembers where the window was before Loadstone moved it, then forgets once that place is restored. By default that is one jump back to the original spot. With **Restore one move at a time** on (Settings → General), each press steps back one move until that same spot, and then it forgets. The next Loadstone command starts a new memory. The memory is also dropped when the window closes or Loadstone restarts.
 
 **Next / previous display beeps.** Only one display is attached.
 

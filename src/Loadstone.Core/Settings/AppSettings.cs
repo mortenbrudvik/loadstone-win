@@ -17,6 +17,13 @@ public sealed class AppSettings : IReadOnlyAppSettings
     public bool DragSnappingEnabled { get; set; }
 
     /// <summary>
+    /// Off unless the user turns it on. Off, Restore jumps back to the frame from before Loadstone
+    /// first moved the window, once. On, each press of Restore steps back one accepted move, including
+    /// a drag snap. Absent in an older settings.json means off, which is also the Mac behavior.
+    /// </summary>
+    public bool RestoreOneMoveAtATime { get; set; }
+
+    /// <summary>
     /// Customized shortcuts keyed by command id. An absent id means the default; an empty string
     /// means the user cleared the binding.
     /// </summary>

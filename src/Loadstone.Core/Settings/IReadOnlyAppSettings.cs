@@ -18,6 +18,12 @@ public interface IReadOnlyAppSettings
     bool DragSnappingEnabled { get; }
 
     /// <summary>
+    /// Whether Restore steps back one accepted move at a time. Absent means off: Restore jumps back
+    /// to the frame from before Loadstone first moved the window (see <see cref="AppSettings.RestoreOneMoveAtATime"/>).
+    /// </summary>
+    bool RestoreOneMoveAtATime { get; }
+
+    /// <summary>
     /// Customized shortcuts keyed by command id. An absent id means the default; an empty string
     /// means the user cleared the binding.
     /// </summary>

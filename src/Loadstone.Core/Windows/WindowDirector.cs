@@ -5,25 +5,49 @@ namespace Loadstone.Core.Windows;
 
 /// <summary>
 /// Runs a <see cref="WindowCommand"/> on an <see cref="IMovableWindow"/>. Keeps the restore ledger:
-/// the pre-Loadstone frame per window, recorded on the first command of any kind, never overwritten,
-/// removed by Restore, so Restore returns the window to where it was before Loadstone first touched
-/// it, not to the previous tile.
+/// the frames to put back, recorded only after a window accepts a write. With one-move restore off
+/// (the default) that is the pre-Loadstone frame, kept once and dropped by Restore. With it on, each
+/// accepted move pushes the frame from just before that move, and Restore steps back one.
 /// </summary>
 public sealed class WindowDirector
 {
-    private readonly Dictionary<WindowIdentity, Rect> _originals = new();
+    /// <summary>
+    /// Previous frames kept per window while one-move restore is on. The oldest stays when this is
+    /// exceeded, so a long session can still step back to the pre-Loadstone frame.
+    /// </summary>
+    private const int MaxRememberedFrames = 32;
+
+    private readonly Dictionary<WindowIdentity, List<Rect>> _frames = new();
     private readonly Func<IReadOnlyList<Display>> _displays;
     private readonly Func<WindowIdentity, bool> _isAlive;
+    private readonly Func<bool> _restoreOneMoveAtATime;
+    private bool _oneMoveAtATime;
 
     /// <param name="displays">The attached displays, primary first, at the time of the call.</param>
     /// <param name="isAlive">Whether an identity still names the same window; dead ones are pruned before every command.</param>
-    public WindowDirector(Func<IReadOnlyList<Display>> displays, Func<WindowIdentity, bool> isAlive)
+    /// <param name="restoreOneMoveAtATime">
+    /// Read when <see cref="ApplyRestoreMode"/> runs and at the start of every command. Absent means
+    /// off: Restore jumps back to the frame from before Loadstone first moved the window.
+    /// </param>
+    public WindowDirector(
+        Func<IReadOnlyList<Display>> displays,
+        Func<WindowIdentity, bool> isAlive,
+        Func<bool>? restoreOneMoveAtATime = null)
     {
         _displays = displays;
         _isAlive = isAlive;
+        _restoreOneMoveAtATime = restoreOneMoveAtATime ?? (() => false);
+        _oneMoveAtATime = _restoreOneMoveAtATime();
     }
 
-    public int RememberedWindowCount => _originals.Count;
+    public int RememberedWindowCount => _frames.Count;
+
+    /// <summary>
+    /// Re-reads <c>restoreOneMoveAtATime</c>. Turning it off collapses each window to its oldest
+    /// frame, which is the pre-Loadstone position, and that happens here rather than on the next
+    /// command: the setting can go off and back on with no command in between.
+    /// </summary>
+    public void ApplyRestoreMode() => SyncMode();
 
     /// <summary>
     /// Runs <paramref name="command"/> on <paramref name="window"/>, using the display under the
@@ -33,6 +57,7 @@ public sealed class WindowDirector
     public CommandOutcome Perform(WindowCommand command, IMovableWindow window)
     {
         Prune();
+        SyncMode();
         if (window.ReadFrame() is not { } current)
         {
             return CommandOutcome.FrameUnreadable;
@@ -81,6 +106,7 @@ public sealed class WindowDirector
     public CommandOutcome Snap(Tile tile, IMovableWindow window, Display display)
     {
         Prune();
+        SyncMode();
         if (window.ReadFrame() is not { } current)
         {
             return CommandOutcome.FrameUnreadable;
@@ -96,15 +122,31 @@ public sealed class WindowDirector
     /// </summary>
     private CommandOutcome Restore(IMovableWindow window)
     {
-        if (!_originals.TryGetValue(window.Identity, out var original))
+        if (!_frames.TryGetValue(window.Identity, out var stack) || stack.Count == 0)
         {
             return CommandOutcome.NothingToRestore;
         }
 
-        var outcome = Apply(original, window, remembering: null);
-        if (outcome.IsMoved)
+        // Off: the oldest frame, then the whole memory. On: the newest frame, then that entry only.
+        // A refused write leaves the stack alone, so the same step can be tried again.
+        var frame = _oneMoveAtATime ? stack[^1] : stack[0];
+        var outcome = Apply(frame, window, remembering: null);
+        if (!outcome.IsMoved)
         {
-            _originals.Remove(window.Identity);
+            return outcome;
+        }
+
+        if (_oneMoveAtATime)
+        {
+            stack.RemoveAt(stack.Count - 1);
+            if (stack.Count == 0)
+            {
+                _frames.Remove(window.Identity);
+            }
+        }
+        else
+        {
+            _frames.Remove(window.Identity);
         }
 
         return outcome;
@@ -155,17 +197,67 @@ public sealed class WindowDirector
 
         if (remembering is { } previous)
         {
-            _originals.TryAdd(window.Identity, previous);
+            Remember(window.Identity, previous);
         }
 
         return CommandOutcome.Moved;
     }
 
+    private void Remember(WindowIdentity identity, Rect previous)
+    {
+        if (!_frames.TryGetValue(identity, out var stack))
+        {
+            stack = [];
+            _frames[identity] = stack;
+        }
+
+        if (!_oneMoveAtATime)
+        {
+            if (stack.Count == 0)
+            {
+                stack.Add(previous);
+            }
+
+            return;
+        }
+
+        if (stack.Count >= MaxRememberedFrames && stack.Count > 1)
+        {
+            stack.RemoveAt(1);
+        }
+
+        stack.Add(previous);
+    }
+
+    private void SyncMode()
+    {
+        var enabled = _restoreOneMoveAtATime();
+        if (_oneMoveAtATime && !enabled)
+        {
+            CollapseToOldest();
+        }
+
+        _oneMoveAtATime = enabled;
+    }
+
+    private void CollapseToOldest()
+    {
+        foreach (var stack in _frames.Values)
+        {
+            if (stack.Count > 1)
+            {
+                var oldest = stack[0];
+                stack.Clear();
+                stack.Add(oldest);
+            }
+        }
+    }
+
     private void Prune()
     {
-        foreach (var identity in _originals.Keys.Where(id => !_isAlive(id)).ToList())
+        foreach (var identity in _frames.Keys.Where(id => !_isAlive(id)).ToList())
         {
-            _originals.Remove(identity);
+            _frames.Remove(identity);
         }
     }
 }

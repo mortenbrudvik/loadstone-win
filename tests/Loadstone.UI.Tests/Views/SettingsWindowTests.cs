@@ -121,6 +121,28 @@ public class SettingsWindowTests
         }
     }
 
+    /// <summary>The General tab is where the user chooses one-shot Restore or stepping back one move.</summary>
+    [WpfFact]
+    public void GeneralTab_OffersRestoreOneMoveAtATime()
+    {
+        var window = ShownWindow(HotkeyStatus.Registered);
+        try
+        {
+            SelectTab(window, "General");
+
+            var toggle = Descendants<Wpf.Ui.Controls.ToggleSwitch>(window)
+                .Single(candidate => candidate.Content as string == "Restore one move at a time");
+            toggle.IsChecked.ShouldBe(false);
+            Descendants<TextBlock>(window)
+                .Any(caption => caption.Text.Contains("steps back one move", StringComparison.Ordinal))
+                .ShouldBeTrue();
+        }
+        finally
+        {
+            window.Hide();
+        }
+    }
+
     /// <summary>The launch-at-login captions change under the user's hands: a refresh or a refused write rewrites them.</summary>
     [WpfFact]
     public void GeneralTab_LaunchAtLoginCaptions_AreLiveRegions()

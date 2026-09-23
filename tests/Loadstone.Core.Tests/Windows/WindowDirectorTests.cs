@@ -15,7 +15,8 @@ public class WindowDirectorTests
     private readonly HashSet<WindowIdentity> _dead = [];
     private List<Display> _displays = [Primary, Secondary];
 
-    private WindowDirector NewDirector() => new(() => _displays, id => !_dead.Contains(id));
+    private WindowDirector NewDirector(Func<bool>? restoreOneMoveAtATime = null) =>
+        new(() => _displays, id => !_dead.Contains(id), restoreOneMoveAtATime);
 
     [Fact]
     public void Perform_Tile_LaysTileIntoTheWorkAreaOfTheWindowsDisplay()
@@ -165,6 +166,138 @@ public class WindowDirectorTests
         director.Perform(WindowCommand.Restore, stranger).ShouldBe(CommandOutcome.NothingToRestore);
         stranger.Writes.ShouldBeEmpty();
         stranger.Frame.ShouldBe(new Rect(40, 60, 300, 200));
+    }
+
+    [Fact]
+    public void Restore_OneMoveAtATime_StepsBackThroughEachAcceptedMove()
+    {
+        var oneMove = true;
+        var window = new FakeWindow(Start);
+        var director = NewDirector(() => oneMove);
+        var left = Tile.LeftHalf.Frame(Primary.WorkArea);
+        var topRight = Tile.TopRight.Frame(Primary.WorkArea);
+
+        director.Perform(WindowCommand.LeftHalf, window);
+        director.Perform(WindowCommand.TopRight, window);
+        director.Perform(WindowCommand.Center, window);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(topRight);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(left);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+        director.RememberedWindowCount.ShouldBe(0);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
+    }
+
+    [Fact]
+    public void Restore_OneMoveAtATime_IncludesADragSnap()
+    {
+        var window = new FakeWindow(Start);
+        var director = NewDirector(() => true);
+        var snapped = Tile.RightHalf.Frame(Secondary.WorkArea);
+
+        director.Snap(Tile.RightHalf, window, Secondary);
+        director.Perform(WindowCommand.LeftHalf, window);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(snapped);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+    }
+
+    [Fact]
+    public void Restore_OneMoveAtATime_RefusedWrite_KeepsThatStep()
+    {
+        var window = new FakeWindow(Start);
+        var director = NewDirector(() => true);
+        director.Perform(WindowCommand.LeftHalf, window);
+        var left = window.Frame!.Value;
+        director.Perform(WindowCommand.TopRight, window);
+
+        window.NextOutcome = CommandOutcome.Rejected(5);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Rejected(5));
+        window.Frame.ShouldBe(Tile.TopRight.Frame(Primary.WorkArea));
+        director.RememberedWindowCount.ShouldBe(1);
+
+        window.NextOutcome = CommandOutcome.Moved;
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(left);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+    }
+
+    [Fact]
+    public void Restore_OneMoveAtATime_TurnedOff_CollapsesToTheOriginalFrame()
+    {
+        // Turning the setting off has to forget the in-between frames even when it is turned
+        // straight back on, before any further command. Otherwise the next Restore would still
+        // step, and "off" would not mean the pre-Loadstone position.
+        var oneMove = true;
+        var window = new FakeWindow(Start);
+        var director = NewDirector(() => oneMove);
+        director.Perform(WindowCommand.LeftHalf, window);
+        director.Perform(WindowCommand.TopRight, window);
+        director.Perform(WindowCommand.Center, window);
+
+        oneMove = false;
+        director.ApplyRestoreMode();
+        oneMove = true;
+        director.ApplyRestoreMode();
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
+    }
+
+    [Fact]
+    public void Restore_OneMoveAtATime_TurnedOn_KeepsTheFrameAlreadyRemembered()
+    {
+        var oneMove = false;
+        var window = new FakeWindow(Start);
+        var director = NewDirector(() => oneMove);
+        director.Perform(WindowCommand.LeftHalf, window);
+        var left = window.Frame!.Value;
+
+        oneMove = true;
+        director.ApplyRestoreMode();
+        director.Perform(WindowCommand.TopRight, window);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(left);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+    }
+
+    [Fact]
+    public void Restore_OneMoveAtATime_KeepsAtMostThirtyTwoFrames_AndStillTheOriginal()
+    {
+        var window = new FakeWindow(Start);
+        var director = NewDirector(() => true);
+        var before = new List<Rect>();
+        for (var i = 0; i < 33; i++)
+        {
+            var placed = new Rect(i * 10, i * 10, 200, 150);
+            window.Frame = placed;
+            before.Add(placed);
+            director.Perform(WindowCommand.LeftHalf, window).ShouldBe(CommandOutcome.Moved);
+        }
+
+        var restored = new List<Rect>();
+        for (var i = 0; i < 32; i++)
+        {
+            director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+            restored.Add(window.Frame!.Value);
+        }
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
+        restored[0].ShouldBe(before[32]);
+        restored[^1].ShouldBe(before[0]);
+        restored.ShouldNotContain(before[1]);
     }
 
     [Fact]

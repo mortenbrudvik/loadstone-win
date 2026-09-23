@@ -61,6 +61,22 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Construction_ReadsRestoreOneMoveAtATime()
+    {
+        _settings.Current.RestoreOneMoveAtATime = true;
+        NewViewModel().RestoreOneMoveAtATime.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void RestoreOneMoveAtATime_Change_PersistsImmediately()
+    {
+        var vm = NewViewModel();
+        vm.RestoreOneMoveAtATime.ShouldBeFalse();
+        vm.RestoreOneMoveAtATime = true;
+        _settings.Current.RestoreOneMoveAtATime.ShouldBeTrue();
+    }
+
+    [Fact]
     public void DragSnappingEnabled_Change_PersistsImmediately()
     {
         var vm = NewViewModel();

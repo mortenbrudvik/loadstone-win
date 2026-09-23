@@ -64,12 +64,19 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _logDirectory = logDirectory;
         LaunchAtLoginMessage = "";
         LaunchAtLoginActionMessage = "";
-        WithoutSideEffects(() => DragSnappingEnabled = settings.Current.DragSnappingEnabled);
+        WithoutSideEffects(() =>
+        {
+            DragSnappingEnabled = settings.Current.DragSnappingEnabled;
+            RestoreOneMoveAtATime = settings.Current.RestoreOneMoveAtATime;
+        });
         RefreshStartup();
     }
 
     [ObservableProperty]
     public partial bool DragSnappingEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool RestoreOneMoveAtATime { get; set; }
 
     [ObservableProperty]
     public partial bool LaunchAtLogin { get; set; }
@@ -111,6 +118,16 @@ internal sealed partial class SettingsViewModel : ObservableObject
         }
 
         _settings.Update(s => s.DragSnappingEnabled = value);
+    }
+
+    partial void OnRestoreOneMoveAtATimeChanged(bool value)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _settings.Update(s => s.RestoreOneMoveAtATime = value);
     }
 
     /// <summary>

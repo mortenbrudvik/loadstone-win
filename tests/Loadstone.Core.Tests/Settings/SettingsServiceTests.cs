@@ -25,6 +25,7 @@ public sealed class SettingsServiceTests : IDisposable
     {
         var service = NewService();
         service.Current.DragSnappingEnabled.ShouldBeFalse();
+        service.Current.RestoreOneMoveAtATime.ShouldBeFalse();
         service.Current.Shortcuts.ShouldBeEmpty();
         service.Current.NativeSnapPreviousValues.ShouldBeNull();
         File.Exists(SettingsPath).ShouldBeFalse();
@@ -57,6 +58,31 @@ public sealed class SettingsServiceTests : IDisposable
     public void Load_MissingFile_LeavesDragSnappingOff()
     {
         NewService().Current.DragSnappingEnabled.ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// An older settings.json has no key for this. Missing has to mean off, or an upgrade would
+    /// change Restore from the one-shot jump the user already has.
+    /// </summary>
+    [Fact]
+    public void Load_FileWithoutTheRestoreKey_LeavesOneMoveAtATimeOff()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(SettingsPath, "{ \"dragSnappingEnabled\": true }");
+
+        var service = NewService();
+        service.Current.DragSnappingEnabled.ShouldBeTrue();
+        service.Current.RestoreOneMoveAtATime.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Update_PersistsRestoreOneMoveAtATime()
+    {
+        var service = NewService();
+        service.Update(s => s.RestoreOneMoveAtATime = true);
+
+        File.ReadAllText(SettingsPath).ShouldContain("\"restoreOneMoveAtATime\": true");
+        NewService().Current.RestoreOneMoveAtATime.ShouldBeTrue();
     }
 
     [Fact]

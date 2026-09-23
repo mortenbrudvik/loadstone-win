@@ -52,6 +52,18 @@
 
             <ui:Card Margin="0,0,0,12">
               <StackPanel>
+                <ui:ToggleSwitch Content="Restore one move at a time" IsChecked="{Binding RestoreOneMoveAtATime}" />
+                <ui:TextBlock
+                    Margin="0,8,0,0"
+                    Appearance="Secondary"
+                    FontTypography="Caption"
+                    TextWrapping="Wrap"
+                    Text="Off, Restore (Ctrl+Alt+Backspace) jumps back to where the window was before Loadstone first moved it. On, each press steps back one move — hotkey or drag snap — until that original spot." />
+              </StackPanel>
+            </ui:Card>
+
+            <ui:Card Margin="0,0,0,12">
+              <StackPanel>
                 <ui:ToggleSwitch
                     Content="Launch at login"
                     IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}"

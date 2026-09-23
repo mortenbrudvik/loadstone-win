@@ -57,8 +57,19 @@ public sealed class AppModule : Module
         // Displays.Source and not Displays.Snapshot: the snapshot abandons the whole list when a
         // monitor cannot be read, which turns every hotkey into a beep, and a source bound to no
         // logger would leave the log the user is told to read with nothing in it about why.
-        builder.Register(c => new WindowDirector(Displays.Source(c.Resolve<ILogger<WindowDirector>>()), WindowLiveness.IsAlive))
-            .AsSelf().SingleInstance();
+        // The director reads the toggle when a command runs, and again on Changed: turning it off
+        // collapses each window to its pre-Loadstone frame, which has to happen even if the toggle
+        // goes back on before the next command. The handler does not write settings.
+        builder.Register(c =>
+        {
+            var settings = c.Resolve<ISettingsService>();
+            var director = new WindowDirector(
+                Displays.Source(c.Resolve<ILogger<WindowDirector>>()),
+                WindowLiveness.IsAlive,
+                () => settings.Current.RestoreOneMoveAtATime);
+            settings.Changed += (_, _) => director.ApplyRestoreMode();
+            return director;
+        }).AsSelf().SingleInstance();
 
         // Input
         builder.RegisterType<CommandDispatcher>().As<ICommandDispatcher>().SingleInstance();
