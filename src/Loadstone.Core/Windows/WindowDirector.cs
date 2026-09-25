@@ -53,7 +53,8 @@ public sealed class WindowDirector
     /// <summary>
     /// Runs <paramref name="command"/> on <paramref name="window"/>, using the display under the
     /// window's centre, or the primary when the window is off every display (after a disconnect) so
-    /// it can still be brought back.
+    /// it can still be brought back. Left and Right Half on a window already in that half carry it on
+    /// to the display beside it (see <see cref="TileExtensions.Continuation"/>).
     /// </summary>
     public CommandOutcome Perform(WindowCommand command, IMovableWindow window)
     {
@@ -87,7 +88,23 @@ public sealed class WindowDirector
 
         if (command.ToTile() is { } tile)
         {
-            return Apply(tile.Frame(display.WorkArea), window, remembering: current);
+            var target = tile.Frame(display.WorkArea);
+            if (Onward(tile, display, displays) is not { } onward)
+            {
+                return Apply(target, window, remembering: current);
+            }
+
+            // Pressed again on a window already in the half, Left and Right Half carry it on. Within
+            // a pixel of the half on every edge counts as in it, as on the Mac, and goes on without
+            // the half being written first. A window that never fills the half exactly (fixed size,
+            // a character grid, a minimum width) is in it when writing the half leaves it in place.
+            if (IsWithinAPixel(current, target))
+            {
+                return Apply(onward, window, remembering: current);
+            }
+
+            var outcome = Apply(target, window, remembering: current, out var alreadyThere);
+            return alreadyThere ? Apply(onward, window, remembering: current) : outcome;
         }
 
         return command switch
@@ -184,13 +201,42 @@ public sealed class WindowDirector
     }
 
     /// <summary>
+    /// Where <paramref name="tile"/> carries a window that is already in it: the landing half of its
+    /// <see cref="TileExtensions.Continuation"/> on the display beside <paramref name="display"/>.
+    /// Null for the tiles that stay on their display, and when nothing is beside it, so at the edge
+    /// of the desk the half is simply laid again and the window stays put.
+    /// </summary>
+    private static Rect? Onward(Tile tile, Display display, IReadOnlyList<Display> displays) =>
+        tile.Continuation() is { } continuation
+            && ScreenGeometry.Adjacent(display, continuation.Toward, displays) is { } beside
+            ? continuation.Landing.Frame(beside.WorkArea)
+            : null;
+
+    /// <summary>
+    /// Every edge within a pixel of <paramref name="target"/>'s. Next Display maps a window
+    /// proportionally, so a half carried onto a width that does not divide evenly lands a pixel off.
+    /// </summary>
+    private static bool IsWithinAPixel(Rect frame, Rect target) =>
+        Math.Abs(frame.Left - target.Left) <= 1 && Math.Abs(frame.Right - target.Right) <= 1
+            && Math.Abs(frame.Top - target.Top) <= 1 && Math.Abs(frame.Bottom - target.Bottom) <= 1;
+
+    private CommandOutcome Apply(Rect frame, IMovableWindow window, Rect? remembering) =>
+        Apply(frame, window, remembering, out _);
+
+    /// <summary>
     /// Writes <paramref name="frame"/>, then records <paramref name="remembering"/> as the frame Restore
     /// should return to, but only once the window has accepted the write and the visible frame
     /// changed. Recording afterwards is what keeps a refused frame, or a command that never ran,
     /// from leaving behind a restore entry.
     /// </summary>
-    private CommandOutcome Apply(Rect frame, IMovableWindow window, Rect? remembering)
+    /// <param name="alreadyThere">
+    /// True when the window accepted the write and still shows <paramref name="remembering"/>: it was
+    /// already where the command puts it. False after a refused write, after an unreadable read-back,
+    /// and whenever <paramref name="remembering"/> is null (Restore), which takes no read-back at all.
+    /// </param>
+    private CommandOutcome Apply(Rect frame, IMovableWindow window, Rect? remembering, out bool alreadyThere)
     {
+        alreadyThere = false;
         var outcome = window.SetFrame(frame);
         if (!outcome.IsMoved)
         {
@@ -202,9 +248,13 @@ public sealed class WindowDirector
         // step. The placement above used the sample taken at the start of the command; this read
         // is only the frame the write left behind. A failed re-read still records, because losing
         // the step is worse than keeping one.
-        if (remembering is { } previous && window.ReadFrame() != previous)
+        if (remembering is { } previous)
         {
-            Remember(window.Identity, previous);
+            alreadyThere = window.ReadFrame() == previous;
+            if (!alreadyThere)
+            {
+                Remember(window.Identity, previous);
+            }
         }
 
         return CommandOutcome.Moved;

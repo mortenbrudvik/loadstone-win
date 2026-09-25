@@ -88,6 +88,89 @@ public class ScreenGeometryTests
     }
 
     [Fact]
+    public void Adjacent_FindsTheDisplayDirectlyOnThatSide()
+    {
+        ScreenGeometry.Adjacent(Primary, Side.Left, Displays).ShouldBe(LeftOf);
+        ScreenGeometry.Adjacent(LeftOf, Side.Right, Displays).ShouldBe(Primary);
+    }
+
+    [Fact]
+    public void Adjacent_NeverWraps_AndNeverAnswersWithADisplayAboveOrBelow()
+    {
+        // Reading order answers Below for the display after Primary and wraps from LeftOf round to
+        // Below, which is why Neighbor cannot say where a half carries on to. LeftOf lies wholly to the
+        // left of Below but shares none of its rows, so it is not beside it either.
+        ScreenGeometry.Adjacent(Primary, Side.Right, Displays).ShouldBeNull();
+        ScreenGeometry.Adjacent(LeftOf, Side.Left, Displays).ShouldBeNull();
+        ScreenGeometry.Adjacent(Below, Side.Left, Displays).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Adjacent_ADisplayTouchingOnlyAtACorner_IsNotAdjacent()
+    {
+        // The corner display ends at x = 0, where here starts, and begins at y = 901, the row after
+        // here's last: it touches one corner and shares no row. Right and Bottom are exclusive, so
+        // an inclusive count, or a test for zero shared rows instead of more than zero, would call
+        // it adjacent and send a half on to a display that is really below.
+        var here = new Display(new Rect(0, 0, 1201, 901), new Rect(0, 0, 1201, 861), 96);
+        var corner = new Display(new Rect(-1001, 901, 1001, 601), new Rect(-1001, 901, 1001, 561), 96);
+
+        ScreenGeometry.Adjacent(here, Side.Left, [here, corner]).ShouldBeNull();
+        ScreenGeometry.Adjacent(corner, Side.Right, [here, corner]).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Adjacent_SingleDisplay_IsNull()
+    {
+        ScreenGeometry.Adjacent(Primary, Side.Left, [Primary]).ShouldBeNull();
+        ScreenGeometry.Adjacent(Primary, Side.Right, [Primary]).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Adjacent_PicksTheNearestDisplay_EvenWhenAFartherOneSharesMoreRows()
+    {
+        // Three in a row. The short middle display shares 601 rows with each outer one, which share all
+        // 901 with each other, and it is still the one beside both: the far one sits behind it.
+        var right = new Display(new Rect(0, 0, 1201, 901), new Rect(0, 0, 1201, 861), 96);
+        var middle = new Display(new Rect(-1001, 0, 1001, 601), new Rect(-1001, 0, 1001, 561), 96);
+        var far = new Display(new Rect(-2202, 0, 1201, 901), new Rect(-2202, 0, 1201, 861), 96);
+        Display[] displays = [far, right, middle];
+
+        ScreenGeometry.Adjacent(right, Side.Left, displays).ShouldBe(middle);
+        ScreenGeometry.Adjacent(far, Side.Right, displays).ShouldBe(middle);
+    }
+
+    [Fact]
+    public void Adjacent_AStackedPair_PicksTheOneSharingMoreRows()
+    {
+        // The mixed-DPI desk from Neighbor_MixedDpiDisplays_OrdersByFrameNotScale. The laptop's right
+        // edge touches both of the stacked pair, but it shares 1440 rows with the lower one and only
+        // 200 with the upper, which reading order would have picked.
+        var far = new Display(new Rect(-5000, -200, 1920, 1080), new Rect(-5000, -200, 1920, 1032), 96);
+        var laptop = new Display(new Rect(-3080, -200, 3072, 1920), new Rect(-3080, -200, 3072, 1872), 192);
+        var upper = new Display(new Rect(-8, -1440, 2560, 1440), new Rect(-8, -1440, 2560, 1392), 96);
+        var lower = new Display(new Rect(-8, 0, 2560, 1440), new Rect(-8, 0, 2560, 1392), 144);
+        Display[] displays = [lower, laptop, upper, far];
+
+        ScreenGeometry.Adjacent(laptop, Side.Right, displays).ShouldBe(lower);
+        ScreenGeometry.Adjacent(upper, Side.Left, displays).ShouldBe(laptop);
+        ScreenGeometry.Adjacent(laptop, Side.Left, displays).ShouldBe(far);
+    }
+
+    [Fact]
+    public void Adjacent_EqualSharedRows_PicksTheUpperDisplay_WhateverTheListOrder()
+    {
+        // 451 rows each. Without a tie-break the answer would follow the order Windows happens to list
+        // the monitors in, which can change between boots.
+        var middle = new Display(new Rect(0, 0, 1201, 902), new Rect(0, 0, 1201, 862), 96);
+        var upper = new Display(new Rect(1201, -550, 1001, 1001), new Rect(1201, -550, 1001, 961), 96);
+        var lower = new Display(new Rect(1201, 451, 1001, 1001), new Rect(1201, 451, 1001, 961), 96);
+
+        ScreenGeometry.Adjacent(middle, Side.Right, [middle, lower, upper]).ShouldBe(upper);
+        ScreenGeometry.Adjacent(middle, Side.Right, [middle, upper, lower]).ShouldBe(upper);
+    }
+
+    [Fact]
     public void Scale_IsDpiOver96()
     {
         Primary.Scale.ShouldBe(1.5);
