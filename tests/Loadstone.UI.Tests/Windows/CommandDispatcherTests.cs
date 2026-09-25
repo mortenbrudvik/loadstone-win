@@ -70,6 +70,12 @@ public class CommandDispatcherTests
         dispatcher.Run(WindowCommand.RightHalf, target);
         TestWindow.Pump();
         var half = Win32Window.VisibleFrame(test.Handle).ShouldNotBeNull();
+
+        // The first press only laid the half: an ordinary move, still at Debug and naming no side.
+        var laid = logger.Entries.ShouldHaveSingleItem();
+        laid.Level.ShouldBe(LogLevel.Debug);
+        laid.Values.ShouldNotContainKey("Side");
+
         dispatcher.Run(WindowCommand.RightHalf, target);
         TestWindow.Pump();
 

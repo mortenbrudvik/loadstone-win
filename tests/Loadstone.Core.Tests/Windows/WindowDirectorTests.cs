@@ -618,10 +618,11 @@ public class WindowDirectorTests
         // An app that accepts a write and ignores it reads back unchanged after the half is written,
         // exactly like a fixed-size window already in the half, so it is carried on. The onward write
         // is ignored too: the window stays where it was, nothing is remembered, and the press answers
-        // Moved without a beep, as the same press did before halves carried on.
+        // Moved without a beep, as the same press did before halves carried on. It is a plain Moved,
+        // not a carry-on, because the window never left: the log must not say it went anywhere.
         var window = new FakeWindow(Start) { HoldFrame = true };
         var director = NewDirector();
-        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.CarriedOn(Side.Right, Start));
+        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
         window.Writes.ShouldBe([new Rect(600, 0, 601, 861), new Rect(1201, -100, 500, 700)]);
         window.Frame.ShouldBe(Start);
         director.RememberedWindowCount.ShouldBe(0);

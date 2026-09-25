@@ -25,9 +25,10 @@ public readonly record struct CarryOn(Side Toward, Rect From);
 
 /// <summary>What became of a command, so callers can log it and give the user a cue.</summary>
 /// <param name="CarryOn">
-/// Set when the command carried the window on to the display beside, whether that write was accepted
-/// (<see cref="OutcomeKind.Moved"/>) or refused (<see cref="OutcomeKind.Rejected"/>), so the log can
-/// say which frame was involved; null for every other command.
+/// Set when the command sent the window on to the display beside, on whatever came of that write:
+/// <see cref="OutcomeKind.Moved"/>, <see cref="OutcomeKind.Rejected"/>, or
+/// <see cref="OutcomeKind.FrameUnreadable"/> when the window went away in between. Null for every
+/// other command, and when the write was accepted but left the window where it was.
 /// </param>
 public readonly record struct CommandOutcome(OutcomeKind Kind, int Win32Error = 0, CarryOn? CarryOn = null)
 {

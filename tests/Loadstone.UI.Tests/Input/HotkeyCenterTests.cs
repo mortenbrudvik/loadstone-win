@@ -25,16 +25,11 @@ public class HotkeyCenterTests
 
     private readonly RecordingLogger<HotkeyCenter> _logger = new();
 
-    /// <summary>The clock the center reads, in milliseconds; a test moves it between presses.</summary>
-    private long _now = 1_000_000;
+    private HotkeyCenter NewCenter() => new(_registrar, _settings, _dispatcher, _probe, _logger);
 
-    private HotkeyCenter NewCenter() => new(_registrar, _settings, _dispatcher, _probe, _logger, () => _now);
-
-    private void Press(WindowCommand command, long at)
-    {
-        _now = at;
-        _registrar.HotkeyPressed += Raise.Event<Action<WindowCommand>>(command);
-    }
+    /// <summary>A press of <paramref name="command"/> that Windows posted at <paramref name="at"/>, in its milliseconds since startup.</summary>
+    private void Press(WindowCommand command, int at) =>
+        _registrar.HotkeyPressed += Raise.Event<Action<WindowCommand, int>>(command, at);
 
     [Fact]
     public void Start_RegistersEveryCommandWithItsDefault()
@@ -288,7 +283,7 @@ public class HotkeyCenterTests
         var center = NewCenter();
         center.Start();
 
-        _registrar.HotkeyPressed += Raise.Event<Action<WindowCommand>>(WindowCommand.LeftHalf);
+        _registrar.HotkeyPressed += Raise.Event<Action<WindowCommand, int>>(WindowCommand.LeftHalf, 0);
 
         _dispatcher.Received(1).Run(WindowCommand.LeftHalf);
     }
@@ -299,21 +294,21 @@ public class HotkeyCenterTests
         var center = NewCenter();
         center.Start();
         center.Suspend();
-        _registrar.HotkeyPressed += Raise.Event<Action<WindowCommand>>(WindowCommand.LeftHalf);
+        _registrar.HotkeyPressed += Raise.Event<Action<WindowCommand, int>>(WindowCommand.LeftHalf, 0);
         _dispatcher.DidNotReceive().Run(Arg.Any<WindowCommand>());
     }
 
     /// <summary>
-    /// The user's log has one leftHalf delivered twice 7 ms apart, and the quickest deliberate repeat of
-    /// one chord in it is 104 ms. Before Left and Right Half carried on, the doubled press laid the same
-    /// half twice; now it would send the window on to the next display. So the same hotkey again within
-    /// 50 ms is a bounce, not a second press, and runs nothing.
+    /// The user's log has one leftHalf logged twice 7 ms apart, and the quickest deliberate repeat of one
+    /// chord in it is about 100 ms (103 ms between log lines). Before Left and Right Half carried on, the
+    /// doubled press laid the same half twice; now it would send the window on to the next display. So
+    /// the same hotkey posted again within 50 ms is a bounce, not a second press, and runs nothing.
     /// </summary>
     [Theory]
     [InlineData(0)]
     [InlineData(7)]
     [InlineData(49)]
-    public void HotkeyPressed_TheSameHotkeyAgainWithin50Ms_IsIgnored(long gap)
+    public void HotkeyPressed_TheSameHotkeyAgainWithin50Ms_IsIgnored(int gap)
     {
         NewCenter().Start();
         Press(WindowCommand.LeftHalf, at: 1_000_000);
@@ -323,8 +318,8 @@ public class HotkeyCenterTests
 
     [Theory]
     [InlineData(50)]
-    [InlineData(104)]
-    public void HotkeyPressed_TheSameHotkeyAgain50MsOrMoreLater_RunsAgain(long gap)
+    [InlineData(103)]
+    public void HotkeyPressed_TheSameHotkeyAgain50MsOrMoreLater_RunsAgain(int gap)
     {
         NewCenter().Start();
         Press(WindowCommand.LeftHalf, at: 1_000_000);
@@ -378,5 +373,21 @@ public class HotkeyCenterTests
         ignored.Level.ShouldBe(LogLevel.Information);
         ignored.Values["Command"].ShouldBe("leftHalf");
         ignored.Values["Gap"].ShouldBe(7L);
+    }
+
+    /// <summary>
+    /// The message time is the tick count as a signed 32-bit number, which wraps every 49.7 days. Taken
+    /// as a plain difference across the wrap, a press 51 ms after the last would come out hugely
+    /// negative, below 50, and be dropped as a bounce.
+    /// </summary>
+    [Theory]
+    [InlineData(int.MaxValue - 2, int.MinValue + 4, 1)]
+    [InlineData(int.MaxValue - 20, int.MinValue + 30, 2)]
+    public void HotkeyPressed_AcrossTheTickCountWrap_MeasuresTheRealGap(int first, int second, int runs)
+    {
+        NewCenter().Start();
+        Press(WindowCommand.LeftHalf, at: first);
+        Press(WindowCommand.LeftHalf, at: second);
+        _dispatcher.Received(runs).Run(WindowCommand.LeftHalf);
     }
 }

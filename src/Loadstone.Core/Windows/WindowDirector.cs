@@ -220,11 +220,16 @@ public sealed class WindowDirector
             : null;
 
     /// <summary>
-    /// Writes the landing half beside, and marks what came of it, accepted or refused, as a carry-on
-    /// from <paramref name="current"/>, so the log can tell it from an ordinary tile.
+    /// Writes the landing half beside, and marks what came of it as a carry-on from
+    /// <paramref name="current"/>, so the log can tell it from an ordinary tile. Not when the write was
+    /// accepted and left the window where it was: an app that ignores writes went nowhere, and saying
+    /// it carried on would send whoever reads the log looking on the wrong display.
     /// </summary>
-    private CommandOutcome CarryOnTo((Rect Frame, Side Toward) onward, IMovableWindow window, Rect current) =>
-        Apply(onward.Frame, window, remembering: current) with { CarryOn = new CarryOn(onward.Toward, current) };
+    private CommandOutcome CarryOnTo((Rect Frame, Side Toward) onward, IMovableWindow window, Rect current)
+    {
+        var outcome = Apply(onward.Frame, window, remembering: current, out var stayed);
+        return stayed ? outcome : outcome with { CarryOn = new CarryOn(onward.Toward, current) };
+    }
 
     /// <summary>
     /// Every edge within a pixel of <paramref name="target"/>'s. Next Display maps a window

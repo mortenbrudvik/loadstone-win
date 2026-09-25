@@ -17,9 +17,17 @@ internal sealed class RecordingLogger<T> : ILogger<T>
 
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        var values = state is IEnumerable<KeyValuePair<string, object?>> pairs
-            ? pairs.ToDictionary(p => p.Key, p => p.Value)
-            : [];
+        // TryAdd, not ToDictionary: a template may name the same placeholder twice, and a recorder that
+        // throws would fail the code under test instead of the assertion.
+        var values = new Dictionary<string, object?>();
+        if (state is IEnumerable<KeyValuePair<string, object?>> pairs)
+        {
+            foreach (var (key, value) in pairs)
+            {
+                values.TryAdd(key, value);
+            }
+        }
+
         Entries.Add((logLevel, formatter(state, exception), values));
     }
 }

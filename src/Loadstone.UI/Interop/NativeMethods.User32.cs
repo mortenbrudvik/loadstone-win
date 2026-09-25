@@ -84,6 +84,10 @@ internal static partial class NativeMethods
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
 
+        /// <summary>When the message being handled was posted, in milliseconds since the system started; wraps every 49.7 days.</summary>
+        [LibraryImport("user32.dll")]
+        internal static partial int GetMessageTime();
+
         [LibraryImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool RegisterHotKey(nint hWnd, int id, uint fsModifiers, uint vk);

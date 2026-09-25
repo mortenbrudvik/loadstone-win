@@ -19,6 +19,10 @@ internal interface IHotkeyRegistrar : IDisposable
     /// </summary>
     HotkeyStatus Unregister(WindowCommand command);
 
-    /// <summary>Raised on the UI thread with the command whose chord was pressed.</summary>
-    event Action<WindowCommand>? HotkeyPressed;
+    /// <summary>
+    /// Raised on the UI thread with the command whose chord was pressed and when the press was posted,
+    /// in milliseconds since the system started (GetMessageTime, which wraps every 49.7 days). That is
+    /// the moment of the keystroke, however long the thread took to reach it.
+    /// </summary>
+    event Action<WindowCommand, int>? HotkeyPressed;
 }

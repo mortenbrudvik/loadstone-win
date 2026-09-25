@@ -17,7 +17,6 @@ internal sealed class HotkeyCenter : IDisposable
     private readonly ICommandDispatcher _dispatcher;
     private readonly IKeyboardLayoutProbe _probe;
     private readonly ILogger<HotkeyCenter> _logger;
-    private readonly Func<long> _milliseconds;
     private readonly Dictionary<WindowCommand, HotkeyStatus> _status = new();
     private readonly Dictionary<WindowCommand, string?> _layoutWarnings = new();
     private readonly HashSet<WindowCommand> _rejectedTextReported = [];
@@ -25,14 +24,14 @@ internal sealed class HotkeyCenter : IDisposable
     private bool _suspended;
 
     /// <summary>
-    /// The same hotkey again sooner than this after the press that ran is a key bounce, not a second
-    /// press. The log that prompted it had one leftHalf delivered twice 7 ms apart, and the quickest
-    /// deliberate repeat of one chord in it was 104 ms.
+    /// The same hotkey posted again sooner than this after the press that ran is a key bounce, not a
+    /// second press. The log that prompted it had one leftHalf logged twice 7 ms apart, and the quickest
+    /// deliberate repeat of one chord in it was about 100 ms (103 ms between log lines).
     /// </summary>
-    private const long BounceMilliseconds = 50;
+    private const uint BounceMilliseconds = 50;
 
     private WindowCommand? _lastRun;
-    private long _lastRunAt;
+    private int _lastRunAt;
 
     public HotkeyCenter(
         IHotkeyRegistrar registrar,
@@ -40,25 +39,12 @@ internal sealed class HotkeyCenter : IDisposable
         ICommandDispatcher dispatcher,
         IKeyboardLayoutProbe probe,
         ILogger<HotkeyCenter> logger)
-        : this(registrar, settings, dispatcher, probe, logger, () => Environment.TickCount64)
-    {
-    }
-
-    /// <param name="milliseconds">A clock in milliseconds that only ever moves forward.</param>
-    internal HotkeyCenter(
-        IHotkeyRegistrar registrar,
-        ISettingsService settings,
-        ICommandDispatcher dispatcher,
-        IKeyboardLayoutProbe probe,
-        ILogger<HotkeyCenter> logger,
-        Func<long> milliseconds)
     {
         _registrar = registrar;
         _settings = settings;
         _dispatcher = dispatcher;
         _probe = probe;
         _logger = logger;
-        _milliseconds = milliseconds;
         _registrar.HotkeyPressed += OnHotkeyPressed;
     }
 
@@ -279,7 +265,7 @@ internal sealed class HotkeyCenter : IDisposable
         }
     }
 
-    private void OnHotkeyPressed(WindowCommand command)
+    private void OnHotkeyPressed(WindowCommand command, int pressedAt)
     {
         if (_suspended)
         {
@@ -288,10 +274,12 @@ internal sealed class HotkeyCenter : IDisposable
 
         // A doubled keypress used to lay the same tile twice, which nobody could see. Now that Left and
         // Right Half carry a window on, the second one would send it to the next display, so the same
-        // hotkey again too soon after the press that ran is dropped. The gap is counted from that press,
-        // not from a dropped one, so a chattering key cannot push the next real press away.
-        var now = _milliseconds();
-        var gap = now - _lastRunAt;
+        // hotkey posted again too soon after the press that ran is dropped. Both are timed by when
+        // Windows posted them, so a bounce that waited in the queue behind a slow command is still
+        // seen as one. The gap is counted from the press that ran, not from a dropped one, so a
+        // chattering key cannot push the next real press away. The subtraction is unsigned so it stays
+        // right when the tick count wraps.
+        long gap = unchecked((uint)(pressedAt - _lastRunAt));
         if (command == _lastRun && gap < BounceMilliseconds)
         {
             _logger.LogInformation("{Command}: ignored a second press {Gap} ms after the one that ran, too soon to be deliberate", command.Id(), gap);
@@ -299,7 +287,7 @@ internal sealed class HotkeyCenter : IDisposable
         }
 
         _lastRun = command;
-        _lastRunAt = now;
+        _lastRunAt = pressedAt;
         _dispatcher.Run(command);
     }
 }
