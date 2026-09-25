@@ -89,22 +89,28 @@ public sealed class WindowDirector
         if (command.ToTile() is { } tile)
         {
             var target = tile.Frame(display.WorkArea);
-            if (Onward(tile, display, displays) is not { } onward)
+
+            // A window on no display (minimized, or lost after a disconnect) is only being brought
+            // onto the primary standing in, so it was never in a half there and never carries on,
+            // for the same reason Move treats it as lost.
+            if (containing is null || Onward(tile, display, displays) is not { } onward)
             {
                 return Apply(target, window, remembering: current);
             }
 
             // Pressed again on a window already in the half, Left and Right Half carry it on. Within
-            // a pixel of the half on every edge counts as in it, as on the Mac, and goes on without
-            // the half being written first. A window that never fills the half exactly (fixed size,
-            // a character grid, a minimum width) is in it when writing the half leaves it in place.
+            // a pixel of the half on every edge counts as in it (the Mac allows a point) and goes on
+            // without the half being written first. A window that never fills the half exactly (fixed
+            // size, a character grid, a minimum width) is in it when writing the half leaves its frame
+            // unchanged. So is an app that accepts the write and ignores it, which reads back the same;
+            // its onward write is ignored too, and the press answers Moved as it always did.
             if (IsWithinAPixel(current, target))
             {
                 return Apply(onward, window, remembering: current);
             }
 
-            var outcome = Apply(target, window, remembering: current, out var alreadyThere);
-            return alreadyThere ? Apply(onward, window, remembering: current) : outcome;
+            var outcome = Apply(target, window, remembering: current, out var unchanged);
+            return unchanged ? Apply(onward, window, remembering: current) : outcome;
         }
 
         return command switch
@@ -214,7 +220,9 @@ public sealed class WindowDirector
 
     /// <summary>
     /// Every edge within a pixel of <paramref name="target"/>'s. Next Display maps a window
-    /// proportionally, so a half carried onto a width that does not divide evenly lands a pixel off.
+    /// proportionally and rounds, so a half it carries across usually lands up to a pixel off. From
+    /// an odd-width work area onto one about three times as wide or more it lands further off; then
+    /// the first press lays the half and the second carries it on.
     /// </summary>
     private static bool IsWithinAPixel(Rect frame, Rect target) =>
         Math.Abs(frame.Left - target.Left) <= 1 && Math.Abs(frame.Right - target.Right) <= 1
@@ -229,14 +237,16 @@ public sealed class WindowDirector
     /// changed. Recording afterwards is what keeps a refused frame, or a command that never ran,
     /// from leaving behind a restore entry.
     /// </summary>
-    /// <param name="alreadyThere">
-    /// True when the window accepted the write and still shows <paramref name="remembering"/>: it was
-    /// already where the command puts it. False after a refused write, after an unreadable read-back,
-    /// and whenever <paramref name="remembering"/> is null (Restore), which takes no read-back at all.
+    /// <param name="unchanged">
+    /// True when the window accepted the write and still shows <paramref name="remembering"/>: the
+    /// write left the visible frame as it was. That is a window already where the command puts it,
+    /// or an app that accepts a write and ignores it; the read-back cannot tell the two apart. False
+    /// after a refused write, after an unreadable read-back, and whenever <paramref name="remembering"/>
+    /// is null (Restore), which takes no read-back at all.
     /// </param>
-    private CommandOutcome Apply(Rect frame, IMovableWindow window, Rect? remembering, out bool alreadyThere)
+    private CommandOutcome Apply(Rect frame, IMovableWindow window, Rect? remembering, out bool unchanged)
     {
-        alreadyThere = false;
+        unchanged = false;
         var outcome = window.SetFrame(frame);
         if (!outcome.IsMoved)
         {
@@ -247,11 +257,13 @@ public sealed class WindowDirector
         // tile again, or a fixed-size window already centered in it. That must not become an undo
         // step. The placement above used the sample taken at the start of the command; this read
         // is only the frame the write left behind. A failed re-read still records, because losing
-        // the step is worse than keeping one.
+        // the step is worse than keeping one. The same read answers `unchanged`, which is how
+        // Perform tells that a window that never fills its half is already in it, so it has to be
+        // taken even when there would be nothing new to remember.
         if (remembering is { } previous)
         {
-            alreadyThere = window.ReadFrame() == previous;
-            if (!alreadyThere)
+            unchanged = window.ReadFrame() == previous;
+            if (!unchanged)
             {
                 Remember(window.Identity, previous);
             }

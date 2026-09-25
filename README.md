@@ -122,7 +122,7 @@ Tray → Loadstone → **Loadstone Help** opens <https://mortenbrudvik.github.io
 
 **Next / previous display beeps.** Only one display is attached.
 
-**Pressing `Ctrl+Alt+←` again does not move the window to the display beside it.** Only a display to the side counts, as arranged in Settings → System → Display; one above or below does not. And the window has to be in that half already: if you have moved it since, or the display's resolution has changed, the first press puts it back into the half.
+**Pressing `Ctrl+Alt+←` again does not move the window to the display beside it.** Only a display to the side counts, as arranged in Settings → System → Display; one above or below does not. And the window has to be in that half already: if you have moved it since, or the display's resolution, scaling, or taskbar has changed, the first press puts it back into the half.
 
 **Windows' own edge snapping is off after Loadstone crashed or was killed.** Loadstone turns it off while its drag snapping is on and back on when it quits normally; after an unclean exit, simply launching Loadstone again restores it. Signing out and back in restores it too.
 

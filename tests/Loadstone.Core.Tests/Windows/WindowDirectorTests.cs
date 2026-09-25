@@ -428,14 +428,18 @@ public class WindowDirectorTests
 
     [Theory]
     [InlineData(601, 0, 600, 861)]
+    [InlineData(599, 0, 602, 861)]
     [InlineData(600, 0, 600, 861)]
+    [InlineData(600, 0, 602, 861)]
     [InlineData(600, 1, 601, 860)]
+    [InlineData(600, -1, 601, 862)]
+    [InlineData(600, 0, 601, 860)]
     [InlineData(600, 0, 601, 862)]
     public void RightHalf_WithinAPixelOfTheHalf_CarriesOnAtTheFirstPress(int x, int y, int width, int height)
     {
-        // One edge each a pixel off the half (600,0,601,861): left, right, top, bottom. A half carried
-        // over by Next Display onto a width that does not divide evenly lands like that. It counts as
-        // in the half, as on the Mac, so the first press carries it on instead of nudging it a pixel.
+        // One edge each a pixel off the half (600,0,601,861), inward and then outward: left, right,
+        // top, bottom. A half carried over by Next Display usually lands like that. It counts as in
+        // the half, so the first press carries it on instead of nudging it a pixel.
         var window = new FakeWindow(new Rect(x, y, width, height));
         NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
         window.Frame.ShouldBe(new Rect(1201, -100, 500, 700));
@@ -444,15 +448,41 @@ public class WindowDirectorTests
 
     [Theory]
     [InlineData(602, 0, 599, 861)]
+    [InlineData(598, 0, 603, 861)]
     [InlineData(600, 0, 599, 861)]
+    [InlineData(600, 0, 603, 861)]
     [InlineData(600, 2, 601, 859)]
+    [InlineData(600, -2, 601, 863)]
     [InlineData(600, 0, 601, 859)]
+    [InlineData(600, 0, 601, 863)]
     public void RightHalf_TwoPixelsOffTheHalf_IsLaidIntoTheHalfFirst(int x, int y, int width, int height)
     {
-        // The same four edges, two pixels off: not in the half yet, so the press lays it in.
+        // The same eight edges, two pixels off: not in the half yet, so the press lays it in. The
+        // outward rows keep "within a pixel" from turning into "covers the half, give or take a pixel".
         var window = new FakeWindow(new Rect(x, y, width, height));
         NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
         window.Frame.ShouldBe(new Rect(600, 0, 601, 861));
+        window.Writes.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void RightHalf_WindowFillingTheWorkArea_IsLaidIntoTheHalf_NotCarriedOn()
+    {
+        // A maximized window already reaches the right edge of the half, and the secondary lies beside
+        // it, but it is not in the half: the press lays it in, and only the next press carries it on.
+        var window = new FakeWindow(Primary.WorkArea);
+        NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(new Rect(600, 0, 601, 861));
+        window.Writes.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void LeftHalf_WindowFillingTheWorkArea_IsLaidIntoTheHalf_NotCarriedOn()
+    {
+        // The mirror on the secondary, which has the primary to its left.
+        var window = new FakeWindow(Secondary.WorkArea);
+        NewDirector().Perform(WindowCommand.LeftHalf, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(new Rect(1201, -100, 500, 700));
         window.Writes.Count.ShouldBe(1);
     }
 
@@ -540,26 +570,102 @@ public class WindowDirectorTests
         director.RememberedWindowCount.ShouldBe(0);
     }
 
+    [Fact]
+    public void RightHalf_FixedSizeWindowPressedTwice_IsCentredInTheHalf_ThenCarriedOn_AndRestoresToStart()
+    {
+        // 501x401 centred on (600,0,601,861) sits at (650,230). The second press writes the half again,
+        // which leaves it there, so it goes on: centred on (1201,-100,500,700) it sits at
+        // (1201 + (500 - 501) / 2, -100 + 299 / 2), which is (1201,49), overhanging the half by a pixel.
+        var window = new FakeWindow(Start) { FixedSize = true };
+        var director = NewDirector();
+        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(new Rect(650, 230, 501, 401));
+        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(new Rect(1201, 49, 501, 401));
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
+    }
+
+    [Fact]
+    public void Restore_OneMoveAtATime_StepsBackAcrossAFixedSizeCarryOn()
+    {
+        // Writing the half again left the window where it was, so that write is no step; carrying it
+        // on is one, and centring it in the half the one before.
+        var window = new FakeWindow(Start) { FixedSize = true };
+        var director = NewDirector(() => true);
+        director.Perform(WindowCommand.RightHalf, window);
+        director.Perform(WindowCommand.RightHalf, window);
+        window.Frame.ShouldBe(new Rect(1201, 49, 501, 401));
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(new Rect(650, 230, 501, 401));
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
+    }
+
+    [Fact]
+    public void RightHalf_WindowThatIgnoresTheWrite_IsTakenAsInTheHalf_AndStaysPut()
+    {
+        // An app that accepts a write and ignores it reads back unchanged after the half is written,
+        // exactly like a fixed-size window already in the half, so it is carried on. The onward write
+        // is ignored too: the window stays where it was, nothing is remembered, and the press answers
+        // Moved without a beep, as the same press did before halves carried on.
+        var window = new FakeWindow(Start) { HoldFrame = true };
+        var director = NewDirector();
+        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        window.Writes.ShouldBe([new Rect(600, 0, 601, 861), new Rect(1201, -100, 500, 700)]);
+        window.Frame.ShouldBe(Start);
+        director.RememberedWindowCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public void RightHalf_WindowOffEveryDisplay_IsLaidIntoThePrimarysHalf_AndNeverCarriesOn()
+    {
+        // The primary only stands in for a window on no display, so the window was never in its half,
+        // even when writing the half leaves the frame unchanged: a minimized window that refuses to
+        // restore, or one that ignores the write. Carrying on would send it to the display beside the
+        // primary.
+        var window = new FakeWindow(new Rect(-9000, -9000, 300, 200)) { HoldFrame = true };
+        NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        window.Writes.ShouldBe([new Rect(600, 0, 601, 861)]);
+    }
+
     [Theory]
     [InlineData(WindowCommand.TopHalf)]
     [InlineData(WindowCommand.BottomHalf)]
+    [InlineData(WindowCommand.TopLeft)]
     [InlineData(WindowCommand.TopRight)]
+    [InlineData(WindowCommand.BottomLeft)]
     [InlineData(WindowCommand.BottomRight)]
+    [InlineData(WindowCommand.LeftThird)]
+    [InlineData(WindowCommand.CenterThird)]
     [InlineData(WindowCommand.RightThird)]
+    [InlineData(WindowCommand.LeftTwoThirds)]
     [InlineData(WindowCommand.RightTwoThirds)]
     [InlineData(WindowCommand.Maximize)]
     public void OnlyTheLeftAndRightHalvesCarryOn_TowardTheRight(WindowCommand command)
     {
-        // Each of these tiles reaches the primary's right edge, and the secondary lies beside it.
+        // Every other tile, on the primary, which has the secondary to its right: none of them goes on,
+        // so a continuation toward the right given to any of them fails here.
         StaysPutWhenPressedAgain(command, Primary);
     }
 
     [Theory]
+    [InlineData(WindowCommand.TopHalf)]
+    [InlineData(WindowCommand.BottomHalf)]
     [InlineData(WindowCommand.TopLeft)]
+    [InlineData(WindowCommand.TopRight)]
     [InlineData(WindowCommand.BottomLeft)]
+    [InlineData(WindowCommand.BottomRight)]
     [InlineData(WindowCommand.LeftThird)]
     [InlineData(WindowCommand.CenterThird)]
+    [InlineData(WindowCommand.RightThird)]
     [InlineData(WindowCommand.LeftTwoThirds)]
+    [InlineData(WindowCommand.RightTwoThirds)]
+    [InlineData(WindowCommand.Maximize)]
     public void OnlyTheLeftAndRightHalvesCarryOn_TowardTheLeft(WindowCommand command)
     {
         // The same on the secondary, which has the primary to its left.
