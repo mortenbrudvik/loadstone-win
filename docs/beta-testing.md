@@ -33,9 +33,10 @@ with a certificate. That is expected for a beta. Click **More info**, then **Run
 Loadstone installs for you only — no administrator password, nothing added for other people on the
 machine. It goes into your own program folder and adds a Start menu entry.
 
-When Setup finishes, Loadstone starts and its Settings window opens by itself. That is intentional
-on a first install: drag-to-snap is off until you turn it on, because switching it on also changes
-one of Windows' own settings.
+When Setup finishes, Loadstone starts: a small card shows for a moment, then it goes to the tray
+without opening a window. Click its tray icon, or start Loadstone again from the Start menu, to open
+Settings. Drag-to-snap is off until you turn it on there, because switching it on also changes one
+of Windows' own settings.
 
 **Where the tray icon went.** Loadstone has no window of its own — it lives in the tray, next to the
 clock. Windows hides icons it has not seen before, so look under the **^** arrow at the left end of
