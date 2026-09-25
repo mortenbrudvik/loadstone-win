@@ -45,13 +45,13 @@ internal sealed class ForegroundHistory : IDisposable
     {
     }
 
+    /// <summary>How many recent windows are kept.</summary>
+    internal const int RecentWindows = 16;
+
     /// <param name="ownPid">
     /// The process whose windows are never the answer. For this process the hook also skips their
     /// events outright; tests pass 0, which owns no windows, so their own windows count.
     /// </param>
-    /// <summary>How many recent windows are kept.</summary>
-    internal const int RecentWindows = 16;
-
     internal ForegroundHistory(ILogger logger, int ownPid, Func<nint, WindowSnapshot> snapshot, Func<nint, bool>? isMinimized = null)
     {
         _logger = logger;
@@ -60,8 +60,8 @@ internal sealed class ForegroundHistory : IDisposable
         _isMinimized = isMinimized ?? (hwnd => User32.IsIconic(hwnd));
     }
 
-    /// <summary>The root of the window most recently in front, or null before any has been seen. Not necessarily the one to act on: <see cref="Resolve"/> says that.</summary>
-    public nint? Last => _recent.Count > 0 ? _recent[^1].Root : null;
+    /// <summary>The root of the window most recently in front, or null before any has been seen; for tests. Not necessarily the one to act on: <see cref="Decide"/> says that.</summary>
+    internal nint? Last => _recent.Count > 0 ? _recent[^1].Root : null;
 
     public bool IsInstalled => _hook != 0;
 

@@ -252,6 +252,56 @@ public class TrayControllerTests
         }
     }
 
+    /// <summary>
+    /// A command that beeps from the menu is explained only by the log: the line names the window that
+    /// decided there was nothing to act on, and why - here a window minimized since.
+    /// </summary>
+    [WpfFact]
+    public void CaptureForeground_WithNothingToActOn_LogsTheWindowThatDecidedAndWhy()
+    {
+        using var minimized = new TestWindow(state: System.Windows.WindowState.Minimized);
+        using var history = new ForegroundHistory(NullLogger.Instance, ownPid: 0, WindowStyles.Snapshot);
+        history.Install().ShouldBeTrue();
+        history.Observe(minimized.Handle);
+        var logger = new RecordingLogger<TrayController>();
+        var dispatcher = Dispatcher();
+        using var hotkeys = Hotkeys(dispatcher);
+        var tray = new TrayController(dispatcher, hotkeys, new ShellActions(), logger, () => { }, history: history);
+        try
+        {
+            tray.CaptureForeground().ShouldBeNull();
+
+            var line = logger.Entries.Where(e => e.Values.ContainsKey("Why")).ShouldHaveSingleItem();
+            line.Values["Hwnd"].ShouldBe(minimized.Handle);
+            line.Values["Why"].ShouldBe("minimized");
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+    }
+
+    /// <summary>Without the hook the menu reads the foreground as it opens, which is the tray, and the log says so rather than blaming the history.</summary>
+    [WpfFact]
+    public void CaptureForeground_WithoutTheHook_SaysSo()
+    {
+        using var history = new ForegroundHistory(NullLogger.Instance, ownPid: 0, WindowStyles.Snapshot);
+        var logger = new RecordingLogger<TrayController>();
+        var dispatcher = Dispatcher();
+        using var hotkeys = Hotkeys(dispatcher);
+        var tray = new TrayController(dispatcher, hotkeys, new ShellActions(), logger, () => { }, history: history);
+        try
+        {
+            tray.CaptureForeground();
+
+            logger.Entries.ShouldContain(e => ((string)e.Values["{OriginalFormat}"]!).Contains("without the foreground hook"));
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+    }
+
     private static ICommandDispatcher Dispatcher() => Substitute.For<ICommandDispatcher>();
 
     private static HotkeyCenter Hotkeys(ICommandDispatcher dispatcher)

@@ -9,7 +9,6 @@ internal static class NativeConstants
     public const long WS_MAXIMIZEBOX = 0x00010000;
     public const long WS_EX_TRANSPARENT = 0x00000020;
     public const long WS_EX_TOOLWINDOW = 0x00000080;
-    public const long WS_EX_TOPMOST = 0x00000008;
     public const long WS_EX_NOACTIVATE = 0x08000000;
     public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;

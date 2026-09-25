@@ -96,6 +96,10 @@ internal static partial class NativeMethods
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool UnregisterHotKey(nint hWnd, int id);
 
+        /// <summary>Raises a WinEvent; the tests use it to reach the foreground hook without taking the foreground.</summary>
+        [LibraryImport("user32.dll")]
+        internal static partial void NotifyWinEvent(uint eventType, nint hwnd, int idObject, int idChild);
+
         [LibraryImport("user32.dll", SetLastError = true)]
         internal static partial nint SetWinEventHook(uint eventMin, uint eventMax, nint hmodWinEventProc, WinEventProc pfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
 

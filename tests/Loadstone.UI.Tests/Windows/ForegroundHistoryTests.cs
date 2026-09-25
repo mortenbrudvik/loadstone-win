@@ -11,12 +11,18 @@ public class ForegroundHistoryTests
 {
     private const int Loadstone = 99;
 
+    /// <summary>Describes the made-up shell surfaces and toolbars; the history judges visibility and cloaking, not this.</summary>
+    private const long WS_EX_TOPMOST = 0x00000008;
+
+    /// <summary>A client-area object: EVENT_SYSTEM_FOREGROUND about anything but the window itself is not a window coming to the front.</summary>
+    private const int OBJID_CLIENT = -4;
+
     /// <summary>An ordinary app window: visible, with a caption and a sizing frame, owned by some other process.</summary>
     private static readonly WindowSnapshot AppWindow =
         new(IsWindow: true, IsVisible: true, IsCloaked: false, Pid: 4242, ClassName: "AppWindow", Style: NativeConstants.WS_CAPTION | NativeConstants.WS_THICKFRAME, ExStyle: 0);
 
     /// <summary>A shell surface or a tray app's popup while it is open: always on top, no caption, no sizing frame.</summary>
-    private static readonly WindowSnapshot Surface = AppWindow with { ClassName = "Windows.UI.Core.CoreWindow", Style = 0, ExStyle = NativeConstants.WS_EX_TOPMOST };
+    private static readonly WindowSnapshot Surface = AppWindow with { ClassName = "Windows.UI.Core.CoreWindow", Style = 0, ExStyle = WS_EX_TOPMOST };
 
     /// <summary>What each made-up handle is right now; a test changes an entry between what took the foreground and when the menu asks.</summary>
     private readonly Dictionary<nint, WindowSnapshot> _windows = [];
@@ -93,7 +99,7 @@ public class ForegroundHistoryTests
     [Fact]
     public void Resolve_AWindowThatTookTheForegroundBeforeItWasVisible_CountsOnceItIs()
     {
-        _windows[2] = AppWindow with { ExStyle = NativeConstants.WS_EX_TOPMOST, IsVisible = false };
+        _windows[2] = AppWindow with { ExStyle = WS_EX_TOPMOST, IsVisible = false };
         var history = NewHistory();
         history.Observe(1);
         history.Observe(2);
@@ -128,7 +134,7 @@ public class ForegroundHistoryTests
     /// </summary>
     [Theory]
     [InlineData("Progman", 0L, 0L)]
-    [InlineData("ZoomFloatingToolbar", 0L, NativeConstants.WS_EX_TOPMOST | NativeConstants.WS_EX_TOOLWINDOW)]
+    [InlineData("ZoomFloatingToolbar", 0L, WS_EX_TOPMOST | NativeConstants.WS_EX_TOOLWINDOW)]
     public void Resolve_AWindowStillOnScreenThatLoadstoneWillNotMove_IsNothing(string className, long style, long exStyle)
     {
         _windows[7] = AppWindow with { ClassName = className, Style = style, ExStyle = exStyle };
@@ -137,7 +143,7 @@ public class ForegroundHistoryTests
         history.Observe(1);
         history.Observe(7);
 
-        history.Resolve().ShouldBeNull();
+        history.Decide().ShouldBe(((nint?)null, (nint?)7));
     }
 
     /// <summary>
@@ -154,7 +160,7 @@ public class ForegroundHistoryTests
 
         _minimized.Add(2);
 
-        history.Resolve().ShouldBeNull();
+        history.Decide().ShouldBe(((nint?)null, (nint?)2));
     }
 
     /// <summary>Closed from its taskbar thumbnail, say, while the taskbar kept the foreground: the window before it is in front again.</summary>
@@ -259,7 +265,67 @@ public class ForegroundHistoryTests
         var history = NewHistory();
 
         history.Last.ShouldBeNull();
-        history.Resolve().ShouldBeNull();
+        history.Decide().ShouldBe(((nint?)null, (nint?)null));
+    }
+
+    /// <summary>
+    /// A window's child can hold the foreground (a control, a XAML island), and the child is not what
+    /// a command moves: the history records the window it belongs to.
+    /// </summary>
+    [WpfFact]
+    public void Observe_AChildOfTheUsersWindow_RecordsTheWindowItself()
+    {
+        using var usersWindow = new TestWindow();
+        using var inside = usersWindow.CreateChild();
+        var history = new ForegroundHistory(NullLogger.Instance, ownPid: 0, WindowStyles.Snapshot);
+
+        history.Observe(inside.Handle);
+
+        history.Last.ShouldBe(usersWindow.Handle);
+        history.Resolve().ShouldBe(usersWindow.Handle);
+    }
+
+    /// <summary>
+    /// Switching back and forth between two windows must not crowd the windows before them out of the
+    /// history: each window is kept once, where it last came to the front.
+    /// </summary>
+    [Fact]
+    public void Observe_TwoWindowsInTurn_KeepTheWindowBeforeThem()
+    {
+        var history = NewHistory();
+        history.Observe(1);
+        for (var i = 0; i < ForegroundHistory.RecentWindows; i++)
+        {
+            history.Observe(2);
+            history.Observe(3);
+        }
+
+        _windows[2] = AppWindow with { IsVisible = false };
+        _windows[3] = AppWindow with { IsVisible = false };
+
+        history.Resolve().ShouldBe((nint)1);
+    }
+
+    /// <summary>
+    /// The hook itself, on every run: the event is raised with NotifyWinEvent rather than by taking
+    /// the foreground, which Windows often refuses a test process. An event about an object inside a
+    /// window rather than the window is not a window coming to the front, and is ignored.
+    /// </summary>
+    [WpfFact]
+    public void Install_HearsTheForegroundEvent_ForTheWindowOnly()
+    {
+        using var history = new ForegroundHistory(NullLogger.Instance, ownPid: 0, WindowStyles.Snapshot);
+        history.Install().ShouldBeTrue();
+        using var first = new TestWindow();
+        using var second = new TestWindow();
+
+        NativeMethods.User32.NotifyWinEvent(NativeConstants.EVENT_SYSTEM_FOREGROUND, first.Handle, NativeConstants.OBJID_WINDOW, 0);
+        TestWindow.Pump();
+        history.Last.ShouldBe(first.Handle);
+
+        NativeMethods.User32.NotifyWinEvent(NativeConstants.EVENT_SYSTEM_FOREGROUND, second.Handle, OBJID_CLIENT, 0);
+        TestWindow.Pump();
+        history.Last.ShouldBe(first.Handle);
     }
 
     /// <summary>

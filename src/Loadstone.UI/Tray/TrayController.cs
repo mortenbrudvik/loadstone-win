@@ -25,7 +25,8 @@ namespace Loadstone.UI.Tray;
 /// act on the window captured just before the menu opens, and that is not whatever is in front by
 /// then: the right-click has already handed the foreground to the taskbar or its hidden-icons flyout,
 /// and opening the menu makes Loadstone the foreground application after that. So the capture asks
-/// <see cref="ForegroundHistory"/> for the last window in front that was neither. Constructing builds
+/// <see cref="ForegroundHistory"/> which window was in front before the tray, if Loadstone may act on
+/// it. Constructing builds
 /// the menu and the icon object; <see cref="Start"/> is what puts the icon in the tray and starts
 /// following the foreground, like the other services that construct inert and start on request.
 /// </summary>
@@ -40,7 +41,7 @@ internal sealed class TrayController : IDisposable
     private readonly ContextMenu _menu = new();
     private readonly TaskbarIcon _icon;
     private readonly Action _applySystemTheme;
-    private readonly Func<WindowIdentity?> _foreground;
+    private readonly Func<WindowIdentity?>? _suppliedForeground;
     private readonly ForegroundHistory? _history;
     private readonly Action _createIcon;
     private Icon? _trayIcon;
@@ -74,7 +75,7 @@ internal sealed class TrayController : IDisposable
         _logger = logger;
         _applySystemTheme = applySystemTheme;
         _history = history;
-        _foreground = foreground ?? (() => LastForeground(_history));
+        _suppliedForeground = foreground;
 
         Rebuild();
         _icon = new TaskbarIcon
@@ -171,41 +172,49 @@ internal sealed class TrayController : IDisposable
     internal ForegroundHistory? History => _history;
 
     /// <summary>Same capture the icon's preview event runs, so a test can open the menu without a click.</summary>
-    internal WindowIdentity? CaptureForeground()
+    internal WindowIdentity? CaptureForeground() =>
+        _capturedForeground = _suppliedForeground is { } supplied ? supplied() : WindowBeforeTheTray();
+
+    /// <summary>
+    /// The window the menu's commands act on, decided once and logged from that same decision: the
+    /// window a menu command moves is chosen here, out of sight, and a command that beeps or moves the
+    /// wrong window can only be explained by this line.
+    /// </summary>
+    private WindowIdentity? WindowBeforeTheTray()
     {
-        // Logged because the window a menu command moves is decided here, out of sight, and a command
-        // that beeps or moves the wrong window can only be explained by this line.
-        _capturedForeground = _foreground();
-        if (_capturedForeground is { } captured)
+        if (_history is not { IsInstalled: true })
+        {
+            // Without the hook, whatever is in front now is all there is, which is the tray, so the
+            // commands beep as they did before the history existed.
+            var fallback = FocusedWindow.Resolve() is { } hwnd ? Win32Window.For(hwnd)?.Identity : null;
+            _logger.LogDebug("tray: menu opened without the foreground hook; its commands act on the foreground as it opened, {Target}", fallback?.ToString() ?? "nothing Loadstone moves");
+            return fallback;
+        }
+
+        var (window, decider) = _history.Decide();
+        if (window is { } chosen && Win32Window.For(chosen)?.Identity is { } captured)
         {
             _logger.LogDebug("tray: menu opened; its commands act on window {Hwnd} of pid {Pid}", captured.Hwnd, captured.Pid);
+            return captured;
         }
-        else if (_history?.Decide().Decider is { } decider)
+
+        if (decider is { } d)
         {
-            // The window that decided it, so a beep can be told apart: the desktop, a toolbar, or a
-            // window minimized since.
+            // The window that decided it, so a beep can be told apart: the desktop, a toolbar, a
+            // window minimized since, or one that went away as the menu opened.
+            var why = window is not null ? "gone" : User32.IsIconic(d) ? "minimized" : "not one Loadstone moves";
             _logger.LogDebug(
                 "tray: menu opened with no window for its commands to act on; the window in front before the tray, {Hwnd} ({Class}), is {Why}",
-                decider,
-                WindowStyles.Snapshot(decider).ClassName,
-                User32.IsIconic(decider) ? "minimized" : "not one Loadstone moves");
+                d,
+                WindowStyles.Snapshot(d).ClassName,
+                why);
         }
         else
         {
             _logger.LogDebug("tray: menu opened with no window for its commands to act on; none of the windows recently in front is still on screen");
         }
 
-        return _capturedForeground;
-    }
-
-    /// <summary>
-    /// The window in front before the tray took the foreground. Without the hook, whatever is in front
-    /// now is all there is, which is the tray, so commands from the menu beep as they did before.
-    /// </summary>
-    private static WindowIdentity? LastForeground(ForegroundHistory? history)
-    {
-        var hwnd = history is { IsInstalled: true } ? history.Resolve() : FocusedWindow.Resolve();
-        return hwnd is { } h ? Win32Window.For(h)?.Identity : null;
+        return null;
     }
 
     private void OnBindingsChanged(object? sender, EventArgs e) => Rebuild();
