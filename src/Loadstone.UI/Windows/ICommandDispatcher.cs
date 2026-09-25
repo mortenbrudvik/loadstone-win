@@ -10,8 +10,8 @@ internal interface ICommandDispatcher
 
     /// <summary>
     /// Runs on a window the caller captured earlier, named by handle *and* owning process. The pid is
-    /// not decoration: the tray menu captures the foreground window before the menu opens and Windows
-    /// recycles handles quickly, so the pid is the only thing separating the window the user aimed at
+    /// not decoration: the tray menu captures the last window that was in front before the menu opens
+    /// and Windows recycles handles quickly, so the pid is the only thing separating the window the user aimed at
     /// from a stranger that inherited its handle while the menu was open.
     /// </summary>
     void Run(WindowCommand command, WindowIdentity target);

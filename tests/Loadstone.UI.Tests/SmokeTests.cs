@@ -63,7 +63,7 @@ public class SmokeTests
         // application level, and SettingsWindowTests supplies those and shows the real window.
         // TrayController is resolved here like everything else: its constructor builds the menu and
         // the icon object, and only Start() - which nothing here calls - puts the icon in the user's
-        // tray and hooks the static SystemEvents.
+        // tray and hooks the static SystemEvents and the foreground.
         var cannotBeBuiltHere = new[] { typeof(SettingsWindow) };
 
         foreach (var serviceType in container.ComponentRegistry.Registrations

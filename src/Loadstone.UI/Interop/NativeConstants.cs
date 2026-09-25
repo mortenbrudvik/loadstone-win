@@ -9,6 +9,7 @@ internal static class NativeConstants
     public const long WS_MAXIMIZEBOX = 0x00010000;
     public const long WS_EX_TRANSPARENT = 0x00000020;
     public const long WS_EX_TOOLWINDOW = 0x00000080;
+    public const long WS_EX_TOPMOST = 0x00000008;
     public const long WS_EX_NOACTIVATE = 0x08000000;
     public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
@@ -54,6 +55,7 @@ internal static class NativeConstants
     public static readonly nint HWND_MESSAGE = -3;
 
     // WinEvents
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_SYSTEM_MOVESIZESTART = 0x000A;
     public const uint EVENT_SYSTEM_MOVESIZEEND = 0x000B;
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;

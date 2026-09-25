@@ -52,8 +52,9 @@ public class TrayControllerTests
 
     /// <summary>
     /// The constructor builds the menu and the icon object and does nothing else the user can see:
-    /// the icon reaches the tray and the static SystemEvents are hooked only in Start(), which no
-    /// test calls. That is what lets the container smoke test resolve the controller at all.
+    /// the icon reaches the tray, and the static SystemEvents and the foreground hook are hooked, only
+    /// in Start(), which no test calls with the real icon. That is what lets the container smoke test
+    /// resolve the controller at all.
     /// </summary>
     [WpfFact]
     public void Construction_WithoutStart_IsInertAndDisposes()
@@ -135,6 +136,115 @@ public class TrayControllerTests
 
             dispatcher.DidNotReceive().Run(Arg.Any<WindowCommand>(), Arg.Any<WindowIdentity>());
             dispatcher.DidNotReceive().Run(Arg.Any<WindowCommand>());
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The smoke test's failure, with real windows: the user's window is in front, then the right-click
+    /// on the tray icon hands the foreground to the hidden-icons flyout before the menu opens. Read
+    /// then, GetForegroundWindow names the flyout, which is nobody's to tile, and every command beeped.
+    /// The second test window plays the flyout by answering to its class name.
+    /// </summary>
+    [WpfFact]
+    public void CaptureForeground_ActsOnTheWindowInFrontBeforeTheTrayTookTheForeground()
+    {
+        using var usersWindow = new TestWindow();
+        using var flyout = new TestWindow();
+        using var history = new ForegroundHistory(
+            NullLogger.Instance,
+            ownPid: 0,
+            hwnd => hwnd == flyout.Handle ? WindowStyles.Snapshot(hwnd) with { ClassName = "TopLevelWindowForOverflowXamlIsland" } : WindowStyles.Snapshot(hwnd));
+        history.Install().ShouldBeTrue();
+        var dispatcher = Dispatcher();
+        using var hotkeys = Hotkeys(dispatcher);
+        var tray = new TrayController(dispatcher, hotkeys, new ShellActions(), NullLogger<TrayController>.Instance, () => { }, history: history);
+        try
+        {
+            if (!usersWindow.TakeForeground() || !flyout.TakeForeground())
+            {
+                Assert.Skip("Windows would not give the test windows the foreground");
+            }
+
+            TestWindow.Pump();
+
+            tray.CaptureForeground().ShouldBe(Win32Window.For(usersWindow.Handle).ShouldNotBeNull().Identity);
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The same capture without asking Windows for the foreground, which a test process is often
+    /// refused: the history is installed and then told what took the foreground, so the controller's
+    /// use of it is checked on every run.
+    /// </summary>
+    [WpfFact]
+    public void CaptureForeground_AsksTheHistory_NotTheForeground()
+    {
+        using var usersWindow = new TestWindow();
+        using var flyout = new TestWindow();
+        using var history = new ForegroundHistory(
+            NullLogger.Instance,
+            ownPid: 0,
+            hwnd => hwnd == flyout.Handle ? WindowStyles.Snapshot(hwnd) with { ClassName = "TopLevelWindowForOverflowXamlIsland" } : WindowStyles.Snapshot(hwnd));
+        history.Install().ShouldBeTrue();
+        history.Observe(usersWindow.Handle);
+        history.Observe(flyout.Handle);
+        var dispatcher = Dispatcher();
+        using var hotkeys = Hotkeys(dispatcher);
+        var tray = new TrayController(dispatcher, hotkeys, new ShellActions(), NullLogger<TrayController>.Instance, () => { }, history: history);
+        try
+        {
+            tray.CaptureForeground().ShouldBe(Win32Window.For(usersWindow.Handle).ShouldNotBeNull().Identity);
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Start is what makes the fix live: without the hook installed, the capture falls back to the
+    /// foreground as the menu opens, which is the tray, and every command beeps again. The icon itself
+    /// is left out through its seam, so no test puts an icon in the user's tray.
+    /// </summary>
+    [WpfFact]
+    public void Start_FollowsTheForeground_AndDisposeStops()
+    {
+        var history = new ForegroundHistory(NullLogger.Instance, ownPid: 0, WindowStyles.Snapshot);
+        var dispatcher = Dispatcher();
+        using var hotkeys = Hotkeys(dispatcher);
+        var tray = new TrayController(dispatcher, hotkeys, new ShellActions(), NullLogger<TrayController>.Instance, () => { }, history: history, createIcon: () => { });
+        try
+        {
+            history.IsInstalled.ShouldBeFalse();
+            tray.Start();
+            history.IsInstalled.ShouldBeTrue();
+        }
+        finally
+        {
+            tray.Dispose();
+        }
+
+        history.IsInstalled.ShouldBeFalse();
+    }
+
+    /// <summary>The controller the container builds carries a history of its own; without one the capture could only ever read the tray.</summary>
+    [WpfFact]
+    public void Constructor_GivesTheMenuAForegroundHistory()
+    {
+        var dispatcher = Dispatcher();
+        using var hotkeys = Hotkeys(dispatcher);
+        var tray = new TrayController(dispatcher, hotkeys, new ShellActions(), NullLogger<TrayController>.Instance);
+        try
+        {
+            tray.History.ShouldNotBeNull();
         }
         finally
         {
