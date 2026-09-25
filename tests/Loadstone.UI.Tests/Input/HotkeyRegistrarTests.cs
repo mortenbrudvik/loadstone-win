@@ -81,12 +81,35 @@ public class HotkeyRegistrarTests
         other.Register(WindowCommand.RightHalf, second).State.ShouldBe(HotkeyState.InUse);
     }
 
+    /// <summary>
+    /// HotkeyCenter tells a key bounce from a second press by the gap between them, so the time it is
+    /// handed must be when the press was posted, not when the UI thread got round to it. A slow command
+    /// (a carry-on onto a display at another scale writes twice) holds the thread, the bounce waits in
+    /// the queue behind it, and timed on arrival it would look like a separate press.
+    /// </summary>
+    [WpfFact]
+    public void HotkeyPressed_CarriesTheTimeThePressWasPosted_NotWhenItWasHandled()
+    {
+        using var registrar = new HotkeyRegistrar();
+        int? pressedAt = null;
+        registrar.HotkeyPressed += (_, time) => pressedAt = time;
+        registrar.Register(WindowCommand.LeftHalf, Obscure).ShouldBe(HotkeyStatus.Registered);
+
+        User32.PostMessage(registrar.Handle, NativeConstants.WM_HOTKEY, (nint)WindowCommand.LeftHalf, 0).ShouldBeTrue();
+        var posted = Environment.TickCount;
+        Thread.Sleep(250);
+        TestWindow.Pump();
+
+        // The tick count moves in steps of about 16 ms, so the two readings can differ by one step.
+        Math.Abs(unchecked(pressedAt.ShouldNotBeNull() - posted)).ShouldBeLessThan(50);
+    }
+
     [WpfFact]
     public void Register_APostedHotkey_RaisesHotkeyPressedForThatCommand()
     {
         using var registrar = new HotkeyRegistrar();
         WindowCommand? raised = null;
-        registrar.HotkeyPressed += command => raised = command;
+        registrar.HotkeyPressed += (command, _) => raised = command;
         registrar.Register(WindowCommand.LeftHalf, Obscure).ShouldBe(HotkeyStatus.Registered);
 
         User32.PostMessage(registrar.Handle, NativeConstants.WM_HOTKEY, (nint)WindowCommand.LeftHalf, 0).ShouldBeTrue();

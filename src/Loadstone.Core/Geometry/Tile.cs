@@ -68,4 +68,19 @@ public static class TileExtensions
             Tile.Maximize => workArea,
         };
     }
+
+    /// <summary>
+    /// Where this tile sends a window that is already in it. Left Half on a window in the left half
+    /// moves it on to the right half of the display to its left, so pressing it again and again walks
+    /// the window across the desk one half at a time; Right Half mirrors that. Null for the tiles that
+    /// stay on their display. No discard arm, so a new tile fails the build here until it is decided.
+    /// </summary>
+    public static (Side Toward, Tile Landing)? Continuation(this Tile tile) => tile switch
+    {
+        Tile.LeftHalf => (Side.Left, Tile.RightHalf),
+        Tile.RightHalf => (Side.Right, Tile.LeftHalf),
+        Tile.TopHalf or Tile.BottomHalf or Tile.TopLeft or Tile.TopRight or Tile.BottomLeft or Tile.BottomRight
+            or Tile.LeftThird or Tile.CenterThird or Tile.RightThird or Tile.LeftTwoThirds or Tile.RightTwoThirds
+            or Tile.Maximize => null,
+    };
 }

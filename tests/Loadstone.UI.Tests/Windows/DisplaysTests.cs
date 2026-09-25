@@ -64,27 +64,11 @@ public class DisplaysTests
     [Fact]
     public void Snapshot_OnAHealthyDesk_ProducesDisplaysAndLogsNoFailure()
     {
-        var logger = new RecordingLogger();
+        var logger = new RecordingLogger<DisplaysTests>();
 
         var displays = Displays.Snapshot(logger);
 
         displays.Count.ShouldBeGreaterThan(0);
         logger.Entries.Where(e => e.Level >= LogLevel.Error).ShouldBeEmpty();
-    }
-
-    /// <summary>An ILogger that keeps what it was told, so a test can ask what was reported.</summary>
-    private sealed class RecordingLogger : ILogger
-    {
-        public List<(LogLevel Level, string Message)> Entries { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            Entries.Add((logLevel, formatter(state, exception)));
-        }
     }
 }

@@ -18,11 +18,26 @@ public sealed class FakeWindow : IMovableWindow
     public CommandOutcome NextOutcome { get; set; } = CommandOutcome.Moved;
 
     /// <summary>
-    /// A Moved write reports success but leaves <see cref="Frame"/> alone. That is a fixed-size
-    /// window already sitting where the command would put it: the write is accepted and the
-    /// visible frame does not change.
+    /// When set, decides each write's outcome from the frame asked for, in place of
+    /// <see cref="NextOutcome"/>: an app that accepts one frame and refuses the next.
+    /// </summary>
+    public Func<Rect, CommandOutcome>? OutcomeFor { get; set; }
+
+    /// <summary>
+    /// A Moved write reports success but leaves <see cref="Frame"/> alone: the write is accepted and
+    /// the visible frame does not change, as with an app that ignores it. <see cref="FixedSize"/> is
+    /// the fuller model of a window without a sizing frame.
     /// </summary>
     public bool HoldFrame { get; set; }
+
+    /// <summary>
+    /// A window without a sizing frame: an accepted write keeps its size and centres it on the target,
+    /// as Win32Window does. Asking again for the tile it is centred on leaves it where it is.
+    /// </summary>
+    public bool FixedSize { get; set; }
+
+    /// <summary>An accepted write leaves a frame that can no longer be read back.</summary>
+    public bool UnreadableAfterWrite { get; set; }
 
     public List<Rect> Writes { get; } = [];
 
@@ -38,11 +53,16 @@ public sealed class FakeWindow : IMovableWindow
     public CommandOutcome SetFrame(Rect frame)
     {
         Writes.Add(frame);
-        if (NextOutcome.IsMoved && !HoldFrame)
+        var outcome = OutcomeFor?.Invoke(frame) ?? NextOutcome;
+        if (outcome.IsMoved && UnreadableAfterWrite)
         {
-            Frame = frame;
+            Frame = null;
+        }
+        else if (outcome.IsMoved && !HoldFrame)
+        {
+            Frame = FixedSize && Frame is { } old ? Layout.CenteredIn(old, frame) : frame;
         }
 
-        return NextOutcome;
+        return outcome;
     }
 }

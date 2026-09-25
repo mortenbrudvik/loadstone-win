@@ -179,6 +179,9 @@ internal sealed class Win32Window : IMovableWindow
         var width = visibleTarget.Width + insets.Left + insets.Right;
         var height = visibleTarget.Height + insets.Top + insets.Bottom;
 
+        // Never SWP_ASYNCWINDOWPOS: the call has to return only once the owning thread has handled the
+        // move, because the frame is read straight back, here for the DPI dance and in WindowDirector
+        // to tell whether Left or Right Half carries the window on to the display beside it.
         if (!User32.SetWindowPos(Hwnd, 0, x, y, width, height, NativeConstants.SWP_NOZORDER | NativeConstants.SWP_NOACTIVATE))
         {
             return CommandOutcome.Rejected(Marshal.GetLastWin32Error());

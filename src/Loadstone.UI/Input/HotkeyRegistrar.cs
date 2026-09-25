@@ -8,8 +8,8 @@ namespace Loadstone.UI.Input;
 
 /// <summary>
 /// Registers global hotkeys on a message-only window and raises <see cref="HotkeyPressed"/> from its
-/// WM_HOTKEY messages. Windows fires on key down; MOD_NOREPEAT stops auto-repeat while the chord is
-/// held. Create and use on the UI thread.
+/// WM_HOTKEY messages, with the time each was posted. Windows fires on key down; MOD_NOREPEAT stops
+/// auto-repeat while the chord is held. Create and use on the UI thread.
 /// </summary>
 internal sealed class HotkeyRegistrar : IHotkeyRegistrar
 {
@@ -35,7 +35,7 @@ internal sealed class HotkeyRegistrar : IHotkeyRegistrar
 
     public nint Handle => _source.Handle;
 
-    public event Action<WindowCommand>? HotkeyPressed;
+    public event Action<WindowCommand, int>? HotkeyPressed;
 
     public HotkeyStatus Register(WindowCommand command, Shortcut shortcut)
     {
@@ -86,7 +86,8 @@ internal sealed class HotkeyRegistrar : IHotkeyRegistrar
         {
             if (_registered.TryGetValue((int)wParam, out var command))
             {
-                HotkeyPressed?.Invoke(command);
+                // The time the press was posted, read while its message is the one being handled.
+                HotkeyPressed?.Invoke(command, User32.GetMessageTime());
             }
 
             handled = true;

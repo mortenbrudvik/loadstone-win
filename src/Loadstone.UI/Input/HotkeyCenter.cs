@@ -23,6 +23,16 @@ internal sealed class HotkeyCenter : IDisposable
     private bool _started;
     private bool _suspended;
 
+    /// <summary>
+    /// The same hotkey posted again sooner than this after the press that ran is a key bounce, not a
+    /// second press. The log that prompted it had one leftHalf logged twice 7 ms apart, and the quickest
+    /// deliberate repeat of one chord in it was about 100 ms (103 ms between log lines).
+    /// </summary>
+    private const uint BounceMilliseconds = 50;
+
+    private WindowCommand? _lastRun;
+    private int _lastRunAt;
+
     public HotkeyCenter(
         IHotkeyRegistrar registrar,
         ISettingsService settings,
@@ -255,13 +265,29 @@ internal sealed class HotkeyCenter : IDisposable
         }
     }
 
-    private void OnHotkeyPressed(WindowCommand command)
+    private void OnHotkeyPressed(WindowCommand command, int pressedAt)
     {
         if (_suspended)
         {
             return;
         }
 
+        // A doubled keypress used to lay the same tile twice, which nobody could see. Now that Left and
+        // Right Half carry a window on, the second one would send it to the next display, so the same
+        // hotkey posted again too soon after the press that ran is dropped. Both are timed by when
+        // Windows posted them, so a bounce that waited in the queue behind a slow command is still
+        // seen as one. The gap is counted from the press that ran, not from a dropped one, so a
+        // chattering key cannot push the next real press away. The subtraction is unsigned so it stays
+        // right when the tick count wraps.
+        long gap = unchecked((uint)(pressedAt - _lastRunAt));
+        if (command == _lastRun && gap < BounceMilliseconds)
+        {
+            _logger.LogInformation("{Command}: ignored a second press {Gap} ms after the one that ran, too soon to be deliberate", command.Id(), gap);
+            return;
+        }
+
+        _lastRun = command;
+        _lastRunAt = pressedAt;
         _dispatcher.Run(command);
     }
 }

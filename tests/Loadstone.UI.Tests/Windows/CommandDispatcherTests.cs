@@ -2,6 +2,7 @@ using Loadstone.Core.Commands;
 using Loadstone.Core.Geometry;
 using Loadstone.Core.Windows;
 using Loadstone.UI.Windows;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
@@ -41,6 +42,48 @@ public class CommandDispatcherTests
         var expected = Tile.LeftHalf.Frame(display.WorkArea);
         Math.Abs(frame.X - expected.X).ShouldBeLessThanOrEqualTo(1);
         Math.Abs(frame.Width - expected.Width).ShouldBeLessThanOrEqualTo(1);
+        _beeps.ShouldBe(0);
+    }
+
+    /// <summary>
+    /// A carry-on is the one tile press that sends a window to another display, so the log has to tell
+    /// it apart: from a plain move it is indistinguishable but for a coordinate that happens to lie on
+    /// another monitor. The desk is the real primary and a display made up to lie right beside it, so
+    /// the second press carries the window on whatever desk this runs on; the window may land off
+    /// every real monitor, which is harmless for the test's own window.
+    /// </summary>
+    [WpfFact]
+    public void Run_RightHalfAgainOnAWindowInTheHalf_LogsTheCarryOnWithItsSideAndStartingFrame()
+    {
+        var primary = Displays.Snapshot()[0];
+        var right = primary.Frame.Right;
+        var beside = new Display(new Rect(right, primary.Frame.Top, 1201, 901), new Rect(right, primary.Frame.Top, 1201, 861), 96);
+        var logger = new RecordingLogger<CommandDispatcher>();
+        var dispatcher = new CommandDispatcher(
+            new WindowDirector(() => [primary, beside], WindowLiveness.IsAlive),
+            logger,
+            () => _focused,
+            () => _beeps++);
+        using var test = new TestWindow();
+        var target = Captured(test);
+
+        dispatcher.Run(WindowCommand.RightHalf, target);
+        TestWindow.Pump();
+        var half = Win32Window.VisibleFrame(test.Handle).ShouldNotBeNull();
+
+        // The first press only laid the half: an ordinary move, still at Debug and naming no side.
+        var laid = logger.Entries.ShouldHaveSingleItem();
+        laid.Level.ShouldBe(LogLevel.Debug);
+        laid.Values.ShouldNotContainKey("Side");
+
+        dispatcher.Run(WindowCommand.RightHalf, target);
+        TestWindow.Pump();
+
+        var carried = logger.Entries.Where(e => e.Values.ContainsKey("Side")).ShouldHaveSingleItem();
+        carried.Level.ShouldBe(LogLevel.Information);
+        carried.Values["Command"].ShouldBe("rightHalf");
+        carried.Values["Side"].ShouldBe("right");
+        carried.Values["From"].ShouldBe(half);
         _beeps.ShouldBe(0);
     }
 

@@ -25,7 +25,7 @@ Loadstone sits in the tray and stays out of the way. When you need two documents
 - **Thirds** — left, center, right, plus two-thirds
 - **Maximize, center, restore** — restore puts the window back where it was before Loadstone first moved it. Settings → General → **Restore one move at a time** makes each press step back one move instead, including a drag snap
 - **Drag to snap** — edges for halves, corners for quarters, top to maximize, bottom for thirds. Only a window that is actually being moved snaps; selecting text or resizing near an edge does nothing
-- **Multi-display** — send a window to the next or previous display, walking displays left to right as they sit on the desk. The window keeps the place and the proportion of the work area it had, so a half stays a half. The mapping is by pixel size, not DPI: on a display with the same pixel dimensions but heavier scaling, the window keeps its pixel size and so looks physically smaller
+- **Multi-display** — press left or right half again and the window carries on into the display beside it, one half at a time. Or send a window to the next or previous display, walking displays left to right as they sit on the desk: the window keeps the place and the proportion of the work area it had, so a half stays a half. That mapping is by pixel size, not DPI: on a display with the same pixel dimensions but heavier scaling, the window keeps its pixel size and so looks physically smaller
 - **Custom shortcuts** — Magnet-style defaults, all editable, with a warning when a chord is taken by another app or types a character on your keyboard layout
 - **Launch at login** — optional, from Settings
 
@@ -53,6 +53,8 @@ The corner keys are a square on the keyboard:
 U  I
 J  K
 ```
+
+Press `Ctrl+Alt+←` again on a window that is already in the left half and it moves on to the right half of the display to its left, so repeated presses walk it across your displays one half at a time. `Ctrl+Alt+→` does the same to the right. At the outer edge of the desk the window stays put, and a display above or below does not count.
 
 On Norwegian, German, and most other European layouts, AltGr is Ctrl+Alt to Windows, so `Ctrl+Alt+E` also captures the `€` key while Loadstone runs. Settings shows "Types € on your keyboard layout" next to any such binding; rebind it if you type that character.
 
@@ -119,6 +121,8 @@ Tray → Loadstone → **Loadstone Help** opens <https://mortenbrudvik.github.io
 **Restore does nothing.** Restore remembers where the window was before Loadstone moved it, then forgets once that place is restored. By default that is one jump back to the original spot. With **Restore one move at a time** on (Settings → General), each press steps back one move until that same spot, and then it forgets. The next Loadstone command starts a new memory. The memory is also dropped when the window closes or Loadstone restarts.
 
 **Next / previous display beeps.** Only one display is attached.
+
+**Pressing `Ctrl+Alt+←` again does not move the window to the display beside it.** Only a display to the side counts, as arranged in Settings → System → Display; one above or below does not. And the window has to be in that half already: if you have moved it since, or the display's resolution, scaling, or taskbar has changed, the first press puts it back into the half.
 
 **Windows' own edge snapping is off after Loadstone crashed or was killed.** Loadstone turns it off while its drag snapping is on and back on when it quits normally; after an unclean exit, simply launching Loadstone again restores it. Signing out and back in restores it too.
 

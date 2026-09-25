@@ -16,6 +16,9 @@ public interface IMovableWindow
     /// </summary>
     Rect? ReadFrame();
 
-    /// <summary>Applies the frame. Returns Moved, or Rejected with the Win32 error.</summary>
+    /// <summary>
+    /// Applies the frame. Returns Moved, Rejected with the Win32 error, or FrameUnreadable when the
+    /// window is gone or its frame or style could not be read before the write.
+    /// </summary>
     CommandOutcome SetFrame(Rect frame);
 }
