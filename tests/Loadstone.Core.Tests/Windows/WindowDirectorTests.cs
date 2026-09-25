@@ -457,8 +457,9 @@ public class WindowDirectorTests
     [InlineData(600, 0, 601, 863)]
     public void RightHalf_TwoPixelsOffTheHalf_IsLaidIntoTheHalfFirst(int x, int y, int width, int height)
     {
-        // The same eight edges, two pixels off: not in the half yet, so the press lays it in. The
-        // outward rows keep "within a pixel" from turning into "covers the half, give or take a pixel".
+        // The same four edges, each two pixels off inward and then outward: not in the half yet, so the
+        // press lays it in. The outward rows keep "within a pixel" from turning into "covers the half,
+        // give or take a pixel".
         var window = new FakeWindow(new Rect(x, y, width, height));
         NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
         window.Frame.ShouldBe(new Rect(600, 0, 601, 861));
@@ -525,9 +526,14 @@ public class WindowDirectorTests
         // at (1201 + 199/2, -100 + 499/2), which is (1300,149). Three reads: the sample before anything
         // is written, then one after each write; the one after writing the half is what decides.
         var window = new FakeWindow(new Rect(750, 330, 301, 201)) { FixedSize = true };
-        NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        var director = NewDirector();
+        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
         window.Frame.ShouldBe(new Rect(1300, 149, 301, 201));
         window.Reads.ShouldBe(3);
+
+        // Carrying on was the first move Loadstone made, so it is the one Restore undoes.
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(new Rect(750, 330, 301, 201));
     }
 
     [Fact]
@@ -633,52 +639,32 @@ public class WindowDirectorTests
         window.Writes.ShouldBe([new Rect(600, 0, 601, 861)]);
     }
 
-    [Theory]
-    [InlineData(WindowCommand.TopHalf)]
-    [InlineData(WindowCommand.BottomHalf)]
-    [InlineData(WindowCommand.TopLeft)]
-    [InlineData(WindowCommand.TopRight)]
-    [InlineData(WindowCommand.BottomLeft)]
-    [InlineData(WindowCommand.BottomRight)]
-    [InlineData(WindowCommand.LeftThird)]
-    [InlineData(WindowCommand.CenterThird)]
-    [InlineData(WindowCommand.RightThird)]
-    [InlineData(WindowCommand.LeftTwoThirds)]
-    [InlineData(WindowCommand.RightTwoThirds)]
-    [InlineData(WindowCommand.Maximize)]
-    public void OnlyTheLeftAndRightHalvesCarryOn_TowardTheRight(WindowCommand command)
+    [Fact]
+    public void OnlyTheLeftAndRightHalvesCarryOn()
     {
-        // Every other tile, on the primary, which has the secondary to its right: none of them goes on,
-        // so a continuation toward the right given to any of them fails here.
-        StaysPutWhenPressedAgain(command, Primary);
+        // Every other tile, pressed again on the primary, which has the secondary to its right, and on
+        // the secondary, which has the primary to its left: none of them goes on, so a continuation
+        // given to any of them, either way, fails here. Walking every command covers a new tile too.
+        foreach (var command in WindowCommands.All)
+        {
+            if (command.ToTile() is not { } tile || tile is Tile.LeftHalf or Tile.RightHalf)
+            {
+                continue;
+            }
+
+            StaysPutWhenPressedAgain(command, tile, Primary);
+            StaysPutWhenPressedAgain(command, tile, Secondary);
+        }
     }
 
-    [Theory]
-    [InlineData(WindowCommand.TopHalf)]
-    [InlineData(WindowCommand.BottomHalf)]
-    [InlineData(WindowCommand.TopLeft)]
-    [InlineData(WindowCommand.TopRight)]
-    [InlineData(WindowCommand.BottomLeft)]
-    [InlineData(WindowCommand.BottomRight)]
-    [InlineData(WindowCommand.LeftThird)]
-    [InlineData(WindowCommand.CenterThird)]
-    [InlineData(WindowCommand.RightThird)]
-    [InlineData(WindowCommand.LeftTwoThirds)]
-    [InlineData(WindowCommand.RightTwoThirds)]
-    [InlineData(WindowCommand.Maximize)]
-    public void OnlyTheLeftAndRightHalvesCarryOn_TowardTheLeft(WindowCommand command)
+    private void StaysPutWhenPressedAgain(WindowCommand command, Tile tile, Display display)
     {
-        // The same on the secondary, which has the primary to its left.
-        StaysPutWhenPressedAgain(command, Secondary);
-    }
-
-    private void StaysPutWhenPressedAgain(WindowCommand command, Display display)
-    {
-        var placed = command.ToTile()!.Value.Frame(display.WorkArea);
+        var placed = tile.Frame(display.WorkArea);
         var window = new FakeWindow(placed);
-        NewDirector().Perform(command, window).ShouldBe(CommandOutcome.Moved);
-        window.Frame.ShouldBe(placed);
-        window.Writes.Count.ShouldBe(1);
+        var where = $"{command.Id()} on {display.Frame}";
+        NewDirector().Perform(command, window).ShouldBe(CommandOutcome.Moved, where);
+        window.Frame.ShouldBe(placed, where);
+        window.Writes.Count.ShouldBe(1, where);
     }
 
     [Fact]

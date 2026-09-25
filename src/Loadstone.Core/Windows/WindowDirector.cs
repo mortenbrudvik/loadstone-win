@@ -103,7 +103,8 @@ public sealed class WindowDirector
             // without the half being written first. A window that never fills the half exactly (fixed
             // size, a character grid, a minimum width) is in it when writing the half leaves its frame
             // unchanged. So is an app that accepts the write and ignores it, which reads back the same;
-            // its onward write is ignored too, and the press answers Moved as it always did.
+            // one that ignores every write ignores the onward one too, and the press answers Moved as it
+            // always did.
             if (IsWithinAPixel(current, target))
             {
                 return Apply(onward, window, remembering: current);
@@ -257,9 +258,9 @@ public sealed class WindowDirector
         // tile again, or a fixed-size window already centered in it. That must not become an undo
         // step. The placement above used the sample taken at the start of the command; this read
         // is only the frame the write left behind. A failed re-read still records, because losing
-        // the step is worse than keeping one. The same read answers `unchanged`, which is how
-        // Perform tells that a window that never fills its half is already in it, so it has to be
-        // taken even when there would be nothing new to remember.
+        // the step is worse than keeping one. This read also decides whether the write left the frame
+        // unchanged, which is how Perform tells that a window that never fills its half is already in
+        // it, so it has to be taken even when there would be nothing new to remember.
         if (remembering is { } previous)
         {
             unchanged = window.ReadFrame() == previous;
