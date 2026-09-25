@@ -54,6 +54,7 @@ internal static class NativeConstants
     public static readonly nint HWND_MESSAGE = -3;
 
     // WinEvents
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_SYSTEM_MOVESIZESTART = 0x000A;
     public const uint EVENT_SYSTEM_MOVESIZEEND = 0x000B;
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
