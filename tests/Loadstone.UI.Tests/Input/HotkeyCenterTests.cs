@@ -1,7 +1,7 @@
 using Loadstone.Core.Commands;
 using Loadstone.UI.Input;
 using Loadstone.UI.Windows;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Shouldly;
 using Xunit;
@@ -23,7 +23,18 @@ public class HotkeyCenterTests
         _probe.CharacterTypedBy(Arg.Any<Shortcut>()).Returns((string?)null);
     }
 
-    private HotkeyCenter NewCenter() => new(_registrar, _settings, _dispatcher, _probe, NullLogger<HotkeyCenter>.Instance);
+    private readonly RecordingLogger<HotkeyCenter> _logger = new();
+
+    /// <summary>The clock the center reads, in milliseconds; a test moves it between presses.</summary>
+    private long _now = 1_000_000;
+
+    private HotkeyCenter NewCenter() => new(_registrar, _settings, _dispatcher, _probe, _logger, () => _now);
+
+    private void Press(WindowCommand command, long at)
+    {
+        _now = at;
+        _registrar.HotkeyPressed += Raise.Event<Action<WindowCommand>>(command);
+    }
 
     [Fact]
     public void Start_RegistersEveryCommandWithItsDefault()
@@ -290,5 +301,82 @@ public class HotkeyCenterTests
         center.Suspend();
         _registrar.HotkeyPressed += Raise.Event<Action<WindowCommand>>(WindowCommand.LeftHalf);
         _dispatcher.DidNotReceive().Run(Arg.Any<WindowCommand>());
+    }
+
+    /// <summary>
+    /// The user's log has one leftHalf delivered twice 7 ms apart, and the quickest deliberate repeat of
+    /// one chord in it is 104 ms. Before Left and Right Half carried on, the doubled press laid the same
+    /// half twice; now it would send the window on to the next display. So the same hotkey again within
+    /// 50 ms is a bounce, not a second press, and runs nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    [InlineData(49)]
+    public void HotkeyPressed_TheSameHotkeyAgainWithin50Ms_IsIgnored(long gap)
+    {
+        NewCenter().Start();
+        Press(WindowCommand.LeftHalf, at: 1_000_000);
+        Press(WindowCommand.LeftHalf, at: 1_000_000 + gap);
+        _dispatcher.Received(1).Run(WindowCommand.LeftHalf);
+    }
+
+    [Theory]
+    [InlineData(50)]
+    [InlineData(104)]
+    public void HotkeyPressed_TheSameHotkeyAgain50MsOrMoreLater_RunsAgain(long gap)
+    {
+        NewCenter().Start();
+        Press(WindowCommand.LeftHalf, at: 1_000_000);
+        Press(WindowCommand.LeftHalf, at: 1_000_000 + gap);
+        _dispatcher.Received(2).Run(WindowCommand.LeftHalf);
+    }
+
+    [Fact]
+    public void HotkeyPressed_ADifferentHotkeyWithin50Ms_Runs()
+    {
+        NewCenter().Start();
+        Press(WindowCommand.LeftHalf, at: 1_000_000);
+        Press(WindowCommand.RightHalf, at: 1_000_007);
+        _dispatcher.Received(1).Run(WindowCommand.LeftHalf);
+        _dispatcher.Received(1).Run(WindowCommand.RightHalf);
+    }
+
+    [Fact]
+    public void HotkeyPressed_TheGapIsCountedFromThePressThatRan_NotFromAnIgnoredOne()
+    {
+        // A bounce that keeps chattering must not push the next real press further away: 60 ms after
+        // the press that ran is a new press even though an ignored one came 20 ms before it.
+        NewCenter().Start();
+        Press(WindowCommand.LeftHalf, at: 1_000_000);
+        Press(WindowCommand.LeftHalf, at: 1_000_040);
+        Press(WindowCommand.LeftHalf, at: 1_000_060);
+        _dispatcher.Received(2).Run(WindowCommand.LeftHalf);
+    }
+
+    [Fact]
+    public void HotkeyPressed_APressWhileSuspended_DoesNotHoldBackTheNextOne()
+    {
+        // While a shortcut is being recorded, presses are nobody's; the first one after Resume is real.
+        var center = NewCenter();
+        center.Start();
+        center.Suspend();
+        Press(WindowCommand.LeftHalf, at: 1_000_000);
+        center.Resume();
+        Press(WindowCommand.LeftHalf, at: 1_000_007);
+        _dispatcher.Received(1).Run(WindowCommand.LeftHalf);
+    }
+
+    [Fact]
+    public void HotkeyPressed_AnIgnoredRepeat_IsLoggedWithItsGap()
+    {
+        NewCenter().Start();
+        Press(WindowCommand.LeftHalf, at: 1_000_000);
+        Press(WindowCommand.LeftHalf, at: 1_000_007);
+
+        var ignored = _logger.Entries.Where(e => e.Values.ContainsKey("Gap")).ShouldHaveSingleItem();
+        ignored.Level.ShouldBe(LogLevel.Information);
+        ignored.Values["Command"].ShouldBe("leftHalf");
+        ignored.Values["Gap"].ShouldBe(7L);
     }
 }

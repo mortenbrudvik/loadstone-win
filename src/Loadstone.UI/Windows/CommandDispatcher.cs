@@ -1,4 +1,5 @@
 using Loadstone.Core.Commands;
+using Loadstone.Core.Geometry;
 using Loadstone.Core.Windows;
 using Loadstone.UI.Interop;
 using Microsoft.Extensions.Logging;
@@ -63,9 +64,13 @@ internal sealed class CommandDispatcher : ICommandDispatcher
         // A switch expression, not a statement, so CS8509 fails the build the day an OutcomeKind is
         // added: this method exists precisely to stop an outcome reaching the user as a bare beep with
         // nothing in the log, and a statement's missing case would do exactly that in silence.
+        // A carry-on is logged a level up, with the side and the frame it was in the half at: it is the
+        // one tile press that sends a window to another display, and a doubled keypress shows up here.
         Action log = outcome.Kind switch
         {
+            OutcomeKind.Moved when outcome.CarryOn is { } carry => () => _logger.LogInformation("{Command}: window {Hwnd} of pid {Pid} was already in the half at {From}, so it carried on to the display on the {Side}, now at {Frame}", id, window.Hwnd, pid, carry.From, SideName(carry.Toward), window.ReadFrame()),
             OutcomeKind.Moved => () => _logger.LogDebug("{Command}: moved window {Hwnd} of pid {Pid} to {Frame}", id, window.Hwnd, pid, window.ReadFrame()),
+            OutcomeKind.Rejected when outcome.CarryOn is { } carry => () => _logger.LogError("{Command}: window {Hwnd} of pid {Pid} was already in the half at {From}, and rejected the frame on the display on the {Side} (Win32 error {Error})", id, window.Hwnd, pid, carry.From, SideName(carry.Toward), outcome.Win32Error),
             OutcomeKind.Rejected => () => _logger.LogError("{Command}: window {Hwnd} of pid {Pid} rejected the frame (Win32 error {Error})", id, window.Hwnd, pid, outcome.Win32Error),
             OutcomeKind.FrameUnreadable => () => _logger.LogError("{Command}: could not read the frame of window {Hwnd} of pid {Pid}", id, window.Hwnd, pid),
             OutcomeKind.NoDisplay => () => _logger.LogError("{Command}: no display attached", id),
@@ -79,4 +84,10 @@ internal sealed class CommandDispatcher : ICommandDispatcher
             _beep();
         }
     }
+
+    private static string SideName(Side side) => side switch
+    {
+        Side.Left => "left",
+        Side.Right => "right",
+    };
 }

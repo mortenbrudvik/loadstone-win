@@ -420,7 +420,7 @@ public class WindowDirectorTests
         // Filling the half, it goes on without the half being written again: one write, and one read
         // either side of it.
         var window = new FakeWindow(new Rect(600, 0, 601, 861));
-        NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.CarriedOn(Side.Right, new Rect(600, 0, 601, 861)));
         window.Frame.ShouldBe(new Rect(1201, -100, 500, 700));
         window.Writes.Count.ShouldBe(1);
         window.Reads.ShouldBe(2);
@@ -441,7 +441,7 @@ public class WindowDirectorTests
         // top, bottom. A half carried over by Next Display usually lands like that. It counts as in
         // the half, so the first press carries it on instead of nudging it a pixel.
         var window = new FakeWindow(new Rect(x, y, width, height));
-        NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        NewDirector().Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.CarriedOn(Side.Right, new Rect(x, y, width, height)));
         window.Frame.ShouldBe(new Rect(1201, -100, 500, 700));
         window.Writes.Count.ShouldBe(1);
     }
@@ -491,7 +491,7 @@ public class WindowDirectorTests
     public void LeftHalf_AlreadyInTheLeftHalf_CarriesOnIntoTheRightHalfOfTheDisplayToTheLeft()
     {
         var window = new FakeWindow(new Rect(1201, -100, 500, 700));
-        NewDirector().Perform(WindowCommand.LeftHalf, window).ShouldBe(CommandOutcome.Moved);
+        NewDirector().Perform(WindowCommand.LeftHalf, window).ShouldBe(CommandOutcome.CarriedOn(Side.Left, new Rect(1201, -100, 500, 700)));
         window.Frame.ShouldBe(new Rect(600, 0, 601, 861));
     }
 
@@ -527,7 +527,7 @@ public class WindowDirectorTests
         // is written, then one after each write; the one after writing the half is what decides.
         var window = new FakeWindow(new Rect(750, 330, 301, 201)) { FixedSize = true };
         var director = NewDirector();
-        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.CarriedOn(Side.Right, new Rect(750, 330, 301, 201)));
         window.Frame.ShouldBe(new Rect(1300, 149, 301, 201));
         window.Reads.ShouldBe(3);
 
@@ -571,7 +571,7 @@ public class WindowDirectorTests
             OutcomeFor = frame => frame.X >= 1201 ? CommandOutcome.Rejected(5) : CommandOutcome.Moved,
         };
         var director = NewDirector();
-        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Rejected(5));
+        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Rejected(5) with { CarryOn = new CarryOn(Side.Right, centred) });
         window.Frame.ShouldBe(centred);
         director.RememberedWindowCount.ShouldBe(0);
     }
@@ -586,7 +586,7 @@ public class WindowDirectorTests
         var director = NewDirector();
         director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
         window.Frame.ShouldBe(new Rect(650, 230, 501, 401));
-        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.CarriedOn(Side.Right, new Rect(650, 230, 501, 401)));
         window.Frame.ShouldBe(new Rect(1201, 49, 501, 401));
 
         director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
@@ -621,7 +621,7 @@ public class WindowDirectorTests
         // Moved without a beep, as the same press did before halves carried on.
         var window = new FakeWindow(Start) { HoldFrame = true };
         var director = NewDirector();
-        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.Moved);
+        director.Perform(WindowCommand.RightHalf, window).ShouldBe(CommandOutcome.CarriedOn(Side.Right, Start));
         window.Writes.ShouldBe([new Rect(600, 0, 601, 861), new Rect(1201, -100, 500, 700)]);
         window.Frame.ShouldBe(Start);
         director.RememberedWindowCount.ShouldBe(0);

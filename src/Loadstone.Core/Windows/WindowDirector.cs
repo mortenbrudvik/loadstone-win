@@ -107,11 +107,11 @@ public sealed class WindowDirector
             // always did.
             if (IsWithinAPixel(current, target))
             {
-                return Apply(onward, window, remembering: current);
+                return CarryOnTo(onward, window, current);
             }
 
             var outcome = Apply(target, window, remembering: current, out var unchanged);
-            return unchanged ? Apply(onward, window, remembering: current) : outcome;
+            return unchanged ? CarryOnTo(onward, window, current) : outcome;
         }
 
         return command switch
@@ -213,11 +213,18 @@ public sealed class WindowDirector
     /// Null for the tiles that stay on their display, and when nothing is beside it, so at the edge
     /// of the desk the half is simply laid again and the window stays put.
     /// </summary>
-    private static Rect? Onward(Tile tile, Display display, IReadOnlyList<Display> displays) =>
+    private static (Rect Frame, Side Toward)? Onward(Tile tile, Display display, IReadOnlyList<Display> displays) =>
         tile.Continuation() is { } continuation
             && ScreenGeometry.Adjacent(display, continuation.Toward, displays) is { } beside
-            ? continuation.Landing.Frame(beside.WorkArea)
+            ? (continuation.Landing.Frame(beside.WorkArea), continuation.Toward)
             : null;
+
+    /// <summary>
+    /// Writes the landing half beside, and marks what came of it, accepted or refused, as a carry-on
+    /// from <paramref name="current"/>, so the log can tell it from an ordinary tile.
+    /// </summary>
+    private CommandOutcome CarryOnTo((Rect Frame, Side Toward) onward, IMovableWindow window, Rect current) =>
+        Apply(onward.Frame, window, remembering: current) with { CarryOn = new CarryOn(onward.Toward, current) };
 
     /// <summary>
     /// Every edge within a pixel of <paramref name="target"/>'s. Next Display maps a window
