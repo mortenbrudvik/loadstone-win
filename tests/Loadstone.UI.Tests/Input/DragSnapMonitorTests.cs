@@ -59,6 +59,11 @@ public class DragSnapMonitorTests
 
             return NextOutcome;
         }
+
+        /// <summary>A dragged window is never maximized by the time it is dropped, so the monitor's tests never see a placement.</summary>
+        public WindowPlacement? ReadPlacement() => null;
+
+        public CommandOutcome SetPlacement(WindowPlacement placement) => NextOutcome;
     }
 
     private static readonly Display Primary = new(new Rect(0, 0, 1201, 901), new Rect(0, 0, 1201, 861), 96);

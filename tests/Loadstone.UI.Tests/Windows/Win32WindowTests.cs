@@ -1,5 +1,6 @@
 using System.Windows;
 using Loadstone.Core.Commands;
+using Loadstone.Core.Windows;
 using Loadstone.UI.Interop;
 using Loadstone.UI.Windows;
 using Shouldly;
@@ -155,6 +156,54 @@ public class Win32WindowTests
         Math.Abs(landed.Y - target.Y).ShouldBeLessThanOrEqualTo(1);
         Math.Abs(landed.Width - target.Width).ShouldBeLessThanOrEqualTo(1);
         Math.Abs(landed.Height - target.Height).ShouldBeLessThanOrEqualTo(1);
+    }
+
+    /// <summary>
+    /// What Restore hands back for a window Loadstone found maximized. SetFrame un-maximizes before it
+    /// tiles, so writing the remembered frame back left a normal window the size of the work area:
+    /// the caption showed Maximize and a title-bar drag moved it instead of un-maximizing. The
+    /// placement is Windows' own WINDOWPLACEMENT round-tripped whole, which is what puts the state
+    /// and the normal frame back together, on the display they were on.
+    /// </summary>
+    [WpfFact]
+    public void SetPlacement_PutsAWindowBackMaximized_WithTheNormalFrameItHad()
+    {
+        using var test = new TestWindow(state: WindowState.Maximized);
+        var window = Captured(test);
+        var before = window.ReadPlacement().ShouldNotBeNull();
+        before.Maximized.ShouldBeTrue();
+
+        window.SetFrame(new Rect(200, 150, 601, 451)).ShouldBe(CommandOutcome.Moved);
+        TestWindow.Pump();
+        Loadstone.UI.Interop.NativeMethods.User32.IsZoomed(test.Handle).ShouldBeFalse();
+
+        window.SetPlacement(before).ShouldBe(CommandOutcome.Moved);
+        TestWindow.Pump();
+
+        Loadstone.UI.Interop.NativeMethods.User32.IsZoomed(test.Handle).ShouldBeTrue();
+        window.ReadPlacement().ShouldBe(before);
+    }
+
+    [WpfFact]
+    public void ReadPlacement_OfANormalWindow_IsNotMaximized()
+    {
+        using var test = new TestWindow();
+
+        var placement = Captured(test).ReadPlacement().ShouldNotBeNull();
+
+        placement.Maximized.ShouldBeFalse();
+        placement.NormalFrame.Width.ShouldBeGreaterThan(0);
+    }
+
+    [WpfFact]
+    public void Placement_OfADestroyedWindow_IsUnreadable()
+    {
+        var test = new TestWindow();
+        var window = Captured(test);
+        test.Dispose();
+
+        window.ReadPlacement().ShouldBeNull();
+        window.SetPlacement(new WindowPlacement(new Rect(0, 0, 100, 100), true)).ShouldBe(CommandOutcome.FrameUnreadable);
     }
 
     [WpfFact]

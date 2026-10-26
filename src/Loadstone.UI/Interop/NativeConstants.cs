@@ -19,6 +19,10 @@ internal static class NativeConstants
     // ShowWindow
     public const int SW_RESTORE = 9;
 
+    // WINDOWPLACEMENT.showCmd, which is a UINT where ShowWindow's nCmdShow is an int.
+    public const uint SW_SHOWNORMAL = 1;
+    public const uint SW_SHOWMAXIMIZED = 3;
+
     // SetWindowPos. HWND_TOPMOST is a negative pseudo-handle the z-order slot is named by, not a real
     // window handle and not an error return; SetWindowPos takes it in hWndInsertAfter.
     public static readonly nint HWND_TOPMOST = -1;
