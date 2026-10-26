@@ -12,6 +12,12 @@
   <img src="https://img.shields.io/badge/status-early-blue" alt="Early">
 </p>
 
+<p align="center">
+  <a href="https://get.microsoft.com/installer/download/9NJZ0KVVD5N2?referrer=appbadge">
+    <img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft">
+  </a>
+</p>
+
 Loadstone sits in the tray and stays out of the way. When you need two documents side by side, a browser in a third, or a window parked in a corner, it moves the focused window to a precise tile of the display's work area — the taskbar is left uncovered. It is the Windows port of the [macOS Loadstone](https://github.com/mortenbrudvik/loadstone), with the same commands and the same defaults.
 
 <p align="center">
