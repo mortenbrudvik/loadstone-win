@@ -10,12 +10,14 @@ using Loadstone.Core.Platform;
 using Loadstone.UI.Controls;
 using Loadstone.UI.Input;
 using Loadstone.UI.Interop;
+using Loadstone.UI.Tests.Windows;
 using Loadstone.UI.ViewModels;
 using Loadstone.UI.Views;
 using Loadstone.UI.Windows;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Shouldly;
+using Wpf.Ui;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Markup;
 using Xunit;
@@ -152,11 +154,141 @@ public class SettingsWindowTests
         {
             SelectTab(window, "General");
 
-            foreach (var path in new[] { "LaunchAtLoginMessage", "LaunchAtLoginActionMessage" })
+            foreach (var path in new[] { "LaunchAtLoginMessage", "LaunchAtLoginActionMessage", "ShellActionMessage" })
             {
                 var caption = Descendants<TextBlock>(window).Single(candidate => BindsTo(candidate, path));
                 AutomationProperties.GetLiveSetting(caption).ShouldBe(AutomationLiveSetting.Polite, path);
             }
+        }
+        finally
+        {
+            window.Hide();
+        }
+    }
+
+    /// <summary>
+    /// Keyboard order follows the tree. The reset button was declared before the scroll viewer so it
+    /// could dock to the bottom, which made it the first Tab stop on the tab: Tab then Space wiped
+    /// every recorded chord before a recorder had been reached.
+    /// </summary>
+    [WpfFact]
+    public void ShortcutsTab_TabOrder_ReachesTheRecordersBeforeRestoreDefaults()
+    {
+        var window = ShownWindow(HotkeyStatus.Registered);
+        try
+        {
+            SelectTab(window, "Shortcuts");
+
+            var first = Descendants<FrameworkElement>(window)
+                .First(element => element is ShortcutRecorder || element is Button { Content: "Restore defaults" });
+            first.ShouldBeOfType<ShortcutRecorder>();
+        }
+        finally
+        {
+            window.Hide();
+        }
+    }
+
+    /// <summary>
+    /// Both buttons docked right, and the one declared first lands rightmost, so the tree order and
+    /// with it the Tab order ran right to left; and with both visible nothing kept them apart.
+    /// </summary>
+    [WpfFact]
+    public void GeneralTab_ShellButtons_ReadLeftToRight_WithAGapBetween()
+    {
+        var (window, _) = ShownWindowWith(HotkeyStatus.Registered, StartupStatus.DisabledInTaskManager);
+        try
+        {
+            SelectTab(window, "General");
+
+            var buttons = Descendants<Button>(window)
+                .Where(button => button.Content is "Open log folder" or "Open Startup Apps")
+                .ToList();
+            buttons.Select(button => (string)button.Content).ShouldBe(["Open log folder", "Open Startup Apps"]);
+            buttons.ShouldAllBe(button => button.IsVisible);
+
+            // A tolerance because the transform to window space carries floating-point error: the
+            // same 8 px margin measured 7.99999999999994 on one run and 8 on another.
+            var logFolder = BoundsIn(window, buttons[0]);
+            var startupApps = BoundsIn(window, buttons[1]);
+            (startupApps.Left - logFolder.Right).ShouldBe(8, tolerance: 0.01);
+        }
+        finally
+        {
+            window.Hide();
+        }
+    }
+
+    /// <summary>
+    /// The caption under each switch is what explains it, and nothing told assistive technology the
+    /// two belong together: a screen reader on the switch announced its content and nothing more.
+    /// The two fixed captions are shared resources, so the help text cannot drift from the text on
+    /// screen; the launch-at-login one follows the live message.
+    /// </summary>
+    [WpfFact]
+    public void GeneralTab_Toggles_CarryTheirCaptionsAsHelpText()
+    {
+        var window = ShownWindow(HotkeyStatus.Registered);
+        try
+        {
+            SelectTab(window, "General");
+
+            foreach (var content in new[] { "Snap windows by dragging to screen edges", "Restore one move at a time" })
+            {
+                var help = AutomationProperties.GetHelpText(Toggle(window, content));
+                help.ShouldNotBeNullOrWhiteSpace(content);
+                Descendants<TextBlock>(window).ShouldContain(block => block.Text == help, content);
+            }
+
+            BindingOperations.GetBinding(Toggle(window, "Launch at login"), AutomationProperties.HelpTextProperty)
+                .ShouldNotBeNull().Path.Path.ShouldBe("LaunchAtLoginMessage");
+        }
+        finally
+        {
+            window.Hide();
+        }
+    }
+
+    [WpfFact]
+    public void GeneralTab_LaunchAtLogin_IsDisabledWhenAPolicyDecidesIt()
+    {
+        var (window, _) = ShownWindowWith(HotkeyStatus.Registered, StartupStatus.DisabledByPolicy);
+        try
+        {
+            SelectTab(window, "General");
+
+            Toggle(window, "Launch at login").IsEnabled.ShouldBeFalse();
+        }
+        finally
+        {
+            window.Hide();
+        }
+    }
+
+    /// <summary>
+    /// The real wiring, end to end: the view model asks through WPF-UI's dialog service and the
+    /// window hosts the dialog. The click opens the question and clears nothing until it is
+    /// answered, and dismissing the question clears nothing at all.
+    /// </summary>
+    [WpfFact]
+    public async Task ShortcutsTab_RestoreDefaults_AsksBeforeClearing()
+    {
+        var (window, settings) = ShownWindowWith(HotkeyStatus.Registered, StartupStatus.NotRegistered);
+        try
+        {
+            settings.Current.Shortcuts["leftHalf"] = "Ctrl+Alt+Shift+Left";
+            SelectTab(window, "Shortcuts");
+
+            var asking = window.Shortcuts.RestoreDefaultsCommand.ExecuteAsync(null);
+            TestWindow.Pump();
+
+            var dialog = Descendants<Wpf.Ui.Controls.ContentDialog>(window).ShouldHaveSingleItem();
+            settings.Current.Shortcuts.ShouldContainKey("leftHalf");
+
+            dialog.Hide(Wpf.Ui.Controls.ContentDialogResult.None);
+            await asking;
+
+            settings.Current.Shortcuts.ShouldContainKey("leftHalf");
         }
         finally
         {
@@ -214,7 +346,11 @@ public class SettingsWindowTests
     /// test host has no Application, so the window carries them itself. Without them FluentWindow has
     /// no template and lays out nothing.
     /// </summary>
-    private static SettingsWindow ShownWindow(HotkeyStatus registration)
+    private static SettingsWindow ShownWindow(HotkeyStatus registration) =>
+        ShownWindowWith(registration, StartupStatus.NotRegistered).Window;
+
+    /// <summary>The window as the app builds it, through the public constructors, with the settings it reads and writes.</summary>
+    private static (SettingsWindow Window, InMemorySettings Settings) ShownWindowWith(HotkeyStatus registration, StartupStatus status)
     {
         var registrar = Substitute.For<IHotkeyRegistrar>();
         registrar.Register(Arg.Any<WindowCommand>(), Arg.Any<Shortcut>()).Returns(registration);
@@ -224,18 +360,23 @@ public class SettingsWindowTests
         var hotkeys = new HotkeyCenter(registrar, settings, Substitute.For<ICommandDispatcher>(), probe, NullLogger<HotkeyCenter>.Instance);
         hotkeys.Start();
         var startup = Substitute.For<IStartupRegistration>();
-        startup.Status.Returns(StartupStatus.NotRegistered);
+        startup.Status.Returns(status);
+        var dialogs = new ContentDialogService();
 
         var window = new SettingsWindow(
             new SettingsViewModel(settings, startup, NullLogger<SettingsViewModel>.Instance),
-            new ShortcutsViewModel(hotkeys),
+            new ShortcutsViewModel(hotkeys, dialogs),
+            dialogs,
             NullLogger<SettingsWindow>.Instance);
         window.Resources.MergedDictionaries.Add(new ThemesDictionary { Theme = ApplicationTheme.Dark });
         window.Resources.MergedDictionaries.Add(new ControlsDictionary());
         window.Show();
         window.UpdateLayout();
-        return window;
+        return (window, settings);
     }
+
+    private static Wpf.Ui.Controls.ToggleSwitch Toggle(SettingsWindow window, string content) =>
+        Descendants<Wpf.Ui.Controls.ToggleSwitch>(window).Single(candidate => candidate.Content as string == content);
 
     private static void SelectTab(SettingsWindow window, string header)
     {

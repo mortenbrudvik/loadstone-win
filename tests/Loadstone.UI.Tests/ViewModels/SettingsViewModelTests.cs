@@ -359,15 +359,68 @@ public sealed class SettingsViewModelTests : IDisposable
         _opened.ShouldBe([_logDirectory]);
     }
 
-    /// <summary>A tray-only app has nowhere to show an error, so the beep is the whole failure report.</summary>
+    /// <summary>
+    /// The beep used to be the whole failure report, on the theory that a tray-only app has nowhere
+    /// to show one. These two buttons live on the General tab of a window that is on screen, so the
+    /// refusal is also explained there, where a screen reader can announce it. The path is in the
+    /// message because the folder is what the user was after.
+    /// </summary>
     [Fact]
-    public void OpenLogFolder_BeepsWhenTheShellRefuses()
+    public void OpenLogFolder_WhenTheShellRefuses_BeepsAndExplains()
     {
         _shellOpens = false;
 
-        NewViewModel().OpenLogFolderCommand.Execute(null);
+        var vm = NewViewModel();
+        vm.OpenLogFolderCommand.Execute(null);
 
         _beeps.ShouldBe(1);
+        vm.ShellActionMessage.ShouldContain(_logDirectory);
+    }
+
+    [Fact]
+    public void OpenStartupApps_WhenTheShellRefuses_BeepsAndExplains()
+    {
+        _shellOpens = false;
+
+        var vm = NewViewModel();
+        vm.OpenStartupAppsCommand.Execute(null);
+
+        _beeps.ShouldBe(1);
+        vm.ShellActionMessage.ShouldContain("Startup Apps");
+    }
+
+    /// <summary>A later attempt that works must not leave the earlier refusal on screen.</summary>
+    [Fact]
+    public void OpenLogFolder_WhenTheShellOpensIt_ClearsAnEarlierRefusal()
+    {
+        _shellOpens = false;
+        var vm = NewViewModel();
+        vm.OpenLogFolderCommand.Execute(null);
+        vm.ShellActionMessage.ShouldNotBeNullOrWhiteSpace();
+
+        _shellOpens = true;
+        vm.OpenLogFolderCommand.Execute(null);
+
+        vm.ShellActionMessage.ShouldBeEmpty();
+    }
+
+    /// <summary>
+    /// Under a policy the write is refused by design, so the switch is disabled with the reason
+    /// beside it rather than left to snap back after a click. Unknown stays enabled: the read
+    /// failed, and a write may still tell the user something the read could not.
+    /// </summary>
+    [Theory]
+    [InlineData(StartupStatus.DisabledByPolicy, false)]
+    [InlineData(StartupStatus.EnabledByPolicy, false)]
+    [InlineData(StartupStatus.NotRegistered, true)]
+    [InlineData(StartupStatus.Enabled, true)]
+    [InlineData(StartupStatus.DisabledInTaskManager, true)]
+    [InlineData(StartupStatus.Unknown, true)]
+    public void RefreshStartup_LetsTheUserChangeLaunchAtLogin_UnlessAPolicyDecidesIt(StartupStatus status, bool canChange)
+    {
+        _startup.Status.Returns(status);
+
+        NewViewModel().CanChangeLaunchAtLogin.ShouldBe(canChange);
     }
 
     [Fact]

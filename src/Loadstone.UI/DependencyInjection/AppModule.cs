@@ -9,6 +9,7 @@ using Loadstone.UI.ViewModels;
 using Loadstone.UI.Views;
 using Loadstone.UI.Windows;
 using Microsoft.Extensions.Logging;
+using Wpf.Ui;
 
 namespace Loadstone.UI.DependencyInjection;
 
@@ -84,6 +85,9 @@ public sealed class AppModule : Module
         // Shell
         builder.RegisterType<ShellActions>().AsSelf().SingleInstance();
         builder.RegisterType<TrayController>().AsSelf().SingleInstance();
+        // One dialog service for the one window: the Settings window registers its host on it when
+        // it is built, and the Shortcuts tab asks through it before restoring the defaults.
+        builder.RegisterType<ContentDialogService>().As<IContentDialogService>().SingleInstance();
         builder.RegisterType<SettingsViewModel>().AsSelf().SingleInstance();
         builder.RegisterType<ShortcutsViewModel>().AsSelf().SingleInstance();
         builder.RegisterType<SettingsWindow>().AsSelf().SingleInstance();
