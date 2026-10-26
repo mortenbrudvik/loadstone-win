@@ -163,28 +163,17 @@ public partial class App : Application
         // Queue the init instead. That second launch can still build Settings before the init runs,
         // because the show-Settings listener is already registered, which is why ShowSettings queues
         // its own refresh. CloseAsync never faults, so the discarded task is safe: a fault here would
-        // otherwise be the unobserved-task path Defer exists to close.
+        // otherwise be the unobserved-task path DeferredWork.Defer exists to close.
         _ = splash?.CloseAsync(_logger);
-        Defer(() => InitializeStartupAsync(services));
+        Dispatcher.Defer(() => InitializeStartupAsync(services));
     }
-
-    /// <summary>
-    /// Queues asynchronous work on the dispatcher and gives a fault the treatment a synchronous throw
-    /// on the UI thread gets: the async lambda posts its exception back to the dispatcher, where
-    /// <see cref="DispatcherUnhandledException"/> logs it as fatal, restores the snap flags and lets
-    /// the process end. The discarded-task idiom this replaces carried the fault to
-    /// <see cref="TaskScheduler.UnobservedTaskException"/>, which fires from the finalizer - so a
-    /// first-run Settings failure was logged only if the GC happened to run before exit, and usually
-    /// not at all.
-    /// </summary>
-    private void Defer(Func<Task> work) => Dispatcher.BeginInvoke(async () => await work());
 
     /// <summary>
     /// The deferred half of startup. Not everything below is guaranteed not to throw:
     /// <see cref="PackagedStartupRegistration.InitializeAsync"/> catches broadly by design, but
     /// <see cref="RegistryStartupRegistration.InitializeAsync"/> only catches registry refusals and
     /// lets a genuine bug through. A throw here reaches the dispatcher's fatal policy through
-    /// <see cref="Defer"/>, the same as it would from a tray click.
+    /// <see cref="DeferredWork.Defer"/>, the same as it would from a tray click.
     /// </summary>
     private async Task InitializeStartupAsync(IServiceProvider services)
     {
@@ -259,7 +248,7 @@ public partial class App : Application
     /// container rather than through the window, because the queued refresh must reach the same
     /// singleton <see cref="SettingsViewModel"/> instance the window is bound to, not a copy of it -
     /// see <see cref="SettingsViewModel.RefreshStartupAsync"/> for why the re-read exists at all.
-    /// Queued through <see cref="Defer"/>, like <see cref="InitializeStartupAsync"/>: showing the
+    /// Queued through <see cref="DeferredWork.Defer"/>, like <see cref="InitializeStartupAsync"/>: showing the
     /// window must stay synchronous. On a single open, the queued refresh lands before the user can
     /// touch the toggle, since nothing pumps the dispatcher between here and
     /// <see cref="SettingsWindow.ShowAndActivate"/> returning - but nothing here checks whether the
@@ -278,7 +267,7 @@ public partial class App : Application
 
         var services = host.Services;
         var settings = services.GetRequiredService<SettingsViewModel>();
-        Defer(settings.RefreshStartupAsync);
+        Dispatcher.Defer(settings.RefreshStartupAsync);
         services.GetRequiredService<SettingsWindow>().ShowAndActivate();
     }
 
