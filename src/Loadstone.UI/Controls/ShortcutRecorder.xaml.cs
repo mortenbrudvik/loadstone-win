@@ -124,10 +124,22 @@ public partial class ShortcutRecorder : UserControl
     internal static KeyModifiers Held(ModifierKeys modifiers)
     {
         var held = KeyModifiers.None;
-        if (modifiers.HasFlag(ModifierKeys.Control)) held |= KeyModifiers.Control;
-        if (modifiers.HasFlag(ModifierKeys.Alt)) held |= KeyModifiers.Alt;
-        if (modifiers.HasFlag(ModifierKeys.Shift)) held |= KeyModifiers.Shift;
-        if (modifiers.HasFlag(ModifierKeys.Windows)) held |= KeyModifiers.Win;
+        if (modifiers.HasFlag(ModifierKeys.Control))
+        {
+            held |= KeyModifiers.Control;
+        }
+        if (modifiers.HasFlag(ModifierKeys.Alt))
+        {
+            held |= KeyModifiers.Alt;
+        }
+        if (modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            held |= KeyModifiers.Shift;
+        }
+        if (modifiers.HasFlag(ModifierKeys.Windows))
+        {
+            held |= KeyModifiers.Win;
+        }
         return held;
     }
 

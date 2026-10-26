@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.IO;
+using System.Security;
 using System.Windows;
 using System.Windows.Threading;
 using Loadstone.UI.Windows;
@@ -96,9 +98,25 @@ internal sealed class StartupSplash
     /// The app theme, not the taskbar's: the Settings window follows this one, and the splash is its
     /// forerunner. TrayController reads SystemUsesLightTheme from the same key for the opposite reason.
     /// </summary>
-    private static bool IsAppThemeLight()
+    private static bool IsAppThemeLight() =>
+        IsAppThemeLight(() => Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"));
+
+    /// <summary>
+    /// The same, over whatever opens the key. A policy or an ACL can refuse an HKCU read, as the tray's
+    /// identical read of SystemUsesLightTheme guards against, and this runs before there is a logger:
+    /// a refused read used to cost the whole splash where it should cost only the theme. Dark is the
+    /// fallback, as it is for a value that is not there.
+    /// </summary>
+    internal static bool IsAppThemeLight(Func<RegistryKey?> openPersonalize)
     {
-        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-        return key?.GetValue("AppsUseLightTheme") is int value && value == 1;
+        try
+        {
+            using var key = openPersonalize();
+            return key?.GetValue("AppsUseLightTheme") is int value && value == 1;
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            return false;
+        }
     }
 }

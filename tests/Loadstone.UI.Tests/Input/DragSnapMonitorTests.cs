@@ -1,4 +1,4 @@
-﻿using Loadstone.Core.Commands;
+using Loadstone.Core.Commands;
 using Loadstone.Core.Geometry;
 using Loadstone.Core.Windows;
 using Loadstone.UI.Input;

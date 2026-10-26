@@ -1,0 +1,10 @@
+# The index holds LF, as git normalizes text, and every checkout gets CRLF, which is what
+# .editorconfig asks for, whatever core.autocrlf says on the machine. Before this file existed the
+# working tree was CRLF only on clones with autocrlf on, and scripts/version-manager.ps1's CRLF
+# write produced a whole-file diff on the others. SourceHygieneTests pins this line.
+* text=auto eol=crlf
+
+# Belt and braces: text=auto detects these, but a misdetected icon or image would be corrupted on checkout.
+*.ico binary
+*.png binary
+*.pfx binary

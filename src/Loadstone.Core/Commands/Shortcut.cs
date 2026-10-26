@@ -90,10 +90,22 @@ public sealed record Shortcut(KeyModifiers Modifiers, int VirtualKey)
     private string Prefix()
     {
         var sb = new StringBuilder();
-        if (Modifiers.HasFlag(KeyModifiers.Control)) sb.Append("Ctrl+");
-        if (Modifiers.HasFlag(KeyModifiers.Alt)) sb.Append("Alt+");
-        if (Modifiers.HasFlag(KeyModifiers.Shift)) sb.Append("Shift+");
-        if (Modifiers.HasFlag(KeyModifiers.Win)) sb.Append("Win+");
+        if (Modifiers.HasFlag(KeyModifiers.Control))
+        {
+            sb.Append("Ctrl+");
+        }
+        if (Modifiers.HasFlag(KeyModifiers.Alt))
+        {
+            sb.Append("Alt+");
+        }
+        if (Modifiers.HasFlag(KeyModifiers.Shift))
+        {
+            sb.Append("Shift+");
+        }
+        if (Modifiers.HasFlag(KeyModifiers.Win))
+        {
+            sb.Append("Win+");
+        }
         return sb.ToString();
     }
 }

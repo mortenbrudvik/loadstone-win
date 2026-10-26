@@ -1,4 +1,4 @@
-﻿using Loadstone.Core.Settings;
+using Loadstone.Core.Settings;
 
 namespace Loadstone.Core.Tests.Settings;
 

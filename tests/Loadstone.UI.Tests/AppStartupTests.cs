@@ -63,6 +63,20 @@ public sealed class AppStartupTests
         splash.ShouldBeGreaterThan(handshake);
     }
 
+    /// <summary>
+    /// The director's subscription to the restore toggle is App's to start and stop, like NativeSnap's:
+    /// the container that builds the director cannot detach what it wires, and every other subscriber
+    /// in the tree is symmetric.
+    /// </summary>
+    [Fact]
+    public void App_StartsAndStopsTheDirectorFollowingTheRestoreToggle()
+    {
+        var text = RepoFile.Text("src/Loadstone.UI/App.xaml.cs");
+
+        Method(text, "protected override void OnStartup(StartupEventArgs e)").ShouldContain("GetRequiredService<WindowDirector>().Follow(");
+        Method(text, "protected override void OnExit(ExitEventArgs e)").ShouldContain("GetRequiredService<WindowDirector>().StopFollowing()");
+    }
+
     [Fact]
     public void App_RestoresEdgeSnappingOnExitAndOnSessionEnd()
     {

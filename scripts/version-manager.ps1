@@ -60,8 +60,8 @@ switch ($Action) {
             'minor' { $new = "$($n[0]).$([int]$n[1] + 1).0" }
             'patch' { $new = "$($n[0]).$($n[1]).$([int]$n[2] + 1)" }
         }
-        # CRLF, matching the committed file. version.json is CRLF and the repo has no .gitattributes,
-        # so writing LF here would turn the first bump into a whole-file diff.
+        # CRLF, matching the checked-out file: .gitattributes gives every checkout CRLF (the index holds LF),
+        # so an LF write here would show as a whole-file diff until git next touched the file.
         [System.IO.File]::WriteAllText($versionFile, "{`r`n  `"version`": `"$new`"`r`n}`r`n")
         "version.json -> $new"
         Set-Version $new

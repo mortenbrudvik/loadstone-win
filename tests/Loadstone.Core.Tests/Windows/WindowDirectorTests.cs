@@ -1,5 +1,6 @@
 using Loadstone.Core.Commands;
 using Loadstone.Core.Geometry;
+using Loadstone.Core.Tests.Settings;
 using Loadstone.Core.Windows;
 using Shouldly;
 using Xunit;
@@ -17,6 +18,39 @@ public class WindowDirectorTests
 
     private WindowDirector NewDirector(Func<bool>? restoreOneMoveAtATime = null) =>
         new(() => _displays, id => !_dead.Contains(id), restoreOneMoveAtATime);
+
+    /// <summary>
+    /// The subscription that applies the toggle the moment it changes used to live in the DI module's
+    /// registration lambda, where nothing could ever detach it. Follow and StopFollowing make it the
+    /// director's own, started and stopped by App like NativeSnap's. The toggle going off and back on
+    /// between two commands is what tells a live subscription from a dead one: Perform re-reads the
+    /// setting itself, so only the subscription can collapse the stack in between.
+    /// </summary>
+    [Fact]
+    public void Follow_AppliesTheRestoreModeOnEveryChange_UntilStopped()
+    {
+        var settings = new InMemorySettings();
+        var window = new FakeWindow(Start);
+        var director = new WindowDirector(() => _displays, id => true, () => settings.Current.RestoreOneMoveAtATime);
+        settings.Update(s => s.RestoreOneMoveAtATime = true);
+
+        director.Follow(settings);
+        director.Perform(WindowCommand.LeftHalf, window);
+        director.Perform(WindowCommand.TopRight, window);
+        settings.Update(s => s.RestoreOneMoveAtATime = false);
+        settings.Update(s => s.RestoreOneMoveAtATime = true);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(Start);
+
+        director.StopFollowing();
+        director.Perform(WindowCommand.LeftHalf, window);
+        var left = window.Frame!.Value;
+        director.Perform(WindowCommand.TopRight, window);
+        settings.Update(s => s.RestoreOneMoveAtATime = false);
+        settings.Update(s => s.RestoreOneMoveAtATime = true);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(left);
+    }
 
     [Fact]
     public void Perform_Tile_LaysTileIntoTheWorkAreaOfTheWindowsDisplay()

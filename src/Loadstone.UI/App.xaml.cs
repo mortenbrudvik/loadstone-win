@@ -6,6 +6,7 @@ using Autofac;
 using Autofac.Extensions.DependencyInjection;
 using Loadstone.Core.Platform;
 using Loadstone.Core.Settings;
+using Loadstone.Core.Windows;
 using Loadstone.UI.DependencyInjection;
 using Loadstone.UI.Input;
 using Loadstone.UI.Interop;
@@ -126,6 +127,7 @@ public partial class App : Application
         // first run turns nothing off. Follow still puts back a crash marker on that path: recovery
         // is not reserved for the run where drag snapping is already on.
         nativeSnap.Follow();
+        services.GetRequiredService<WindowDirector>().Follow(settings);
         services.GetRequiredService<TrayController>().Start();
         services.GetRequiredService<HotkeyCenter>().Start();
         var drag = services.GetRequiredService<DragSnapMonitor>();
@@ -212,6 +214,7 @@ public partial class App : Application
                 // past every step below.
                 nativeSnap = services.GetService<NativeSnap>();
                 BestEffort("stop following the drag-snapping setting", () => nativeSnap?.StopFollowing());
+                BestEffort("stop following the restore setting", () => services.GetRequiredService<WindowDirector>().StopFollowing());
                 BestEffort("stop the drag monitor", () => services.GetRequiredService<DragSnapMonitor>().Stop());
                 BestEffort("release the hotkeys", () => services.GetRequiredService<HotkeyCenter>().Dispose());
                 BestEffort("close the hotkey window", () => services.GetRequiredService<IHotkeyRegistrar>().Dispose());

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Resources;
+using System.Security;
 using System.Windows.Media.Imaging;
 using Loadstone.UI.Services;
 using Shouldly;
@@ -63,6 +64,21 @@ public class StartupSplashTests
 
         at150.ShouldBe((at100.Width * 3 / 2, at100.Height * 3 / 2));
         at200.ShouldBe((at100.Width * 2, at100.Height * 2));
+    }
+
+    /// <summary>
+    /// A policy or an ACL can refuse the Personalize key, and Show runs before there is a logger. The
+    /// tray's identical read is guarded; this one was not, so a refused read cost the whole splash
+    /// where it should cost only the theme. Dark is the fallback, as it is for a value that is not there.
+    /// </summary>
+    [Fact]
+    public void IsAppThemeLight_WhenTheKeyCannotBeOpened_FallsBackToDark()
+    {
+        var light = true;
+
+        Should.NotThrow(() => light = StartupSplash.IsAppThemeLight(() => throw new SecurityException("refused by policy")));
+
+        light.ShouldBeFalse();
     }
 
     private static (int Width, int Height) PixelSize(string resourceName)
