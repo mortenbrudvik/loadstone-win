@@ -58,19 +58,18 @@ public sealed class AppModule : Module
         // Displays.Source(logger), not the logger-less Snapshot(). Both abandon the whole list when a
         // monitor cannot be read, which turns every hotkey into a beep. Source logs that abandon
         // under WindowDirector, which is where a reader of the log looks for it.
-        // The director reads the toggle when a command runs, and again on Changed: turning it off
-        // reduces each window's remembered stack to its oldest frame, which has to happen even if
-        // the toggle goes back on before the next command. The window stays where it is until
-        // Restore. The handler does not write settings.
+        // The director reads the toggle when a command runs and again on every settings change, so
+        // that turning it off reduces each window's remembered stack to its oldest frame even when
+        // the toggle goes back on before the next command. That subscription is App's to start and
+        // stop (WindowDirector.Follow / StopFollowing), like NativeSnap's: a registration lambda can
+        // only ever attach, and every other subscriber in the tree is symmetric.
         builder.Register(c =>
         {
             var settings = c.Resolve<ISettingsService>();
-            var director = new WindowDirector(
+            return new WindowDirector(
                 Displays.Source(c.Resolve<ILogger<WindowDirector>>()),
                 WindowLiveness.IsAlive,
                 () => settings.Current.RestoreOneMoveAtATime);
-            settings.Changed += (_, _) => director.ApplyRestoreMode();
-            return director;
         }).AsSelf().SingleInstance();
 
         // Input

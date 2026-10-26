@@ -1,5 +1,6 @@
 using Loadstone.Core.Commands;
 using Loadstone.Core.Geometry;
+using Loadstone.Core.Settings;
 
 namespace Loadstone.Core.Windows;
 
@@ -23,6 +24,7 @@ public sealed class WindowDirector
     private readonly Func<IReadOnlyList<Display>> _displays;
     private readonly Func<WindowIdentity, bool> _isAlive;
     private readonly Func<bool> _restoreOneMoveAtATime;
+    private ISettingsService? _followed;
     private bool _oneMoveAtATime;
 
     /// <param name="displays">The attached displays, primary first, at the time of the call.</param>
@@ -43,6 +45,36 @@ public sealed class WindowDirector
     }
 
     public int RememberedWindowCount => _frames.Count;
+
+    /// <summary>
+    /// Applies <see cref="ApplyRestoreMode"/> on every settings change until <see cref="StopFollowing"/>.
+    /// The director's own subscription, started and stopped by App like NativeSnap's, rather than one
+    /// wired in the container's registration lambda where nothing could detach it. Following twice
+    /// is following once. The handler never writes settings, so it needs no flip detection.
+    /// </summary>
+    public void Follow(ISettingsService settings)
+    {
+        if (_followed is not null)
+        {
+            return;
+        }
+
+        _followed = settings;
+        settings.Changed += OnSettingsChanged;
+    }
+
+    public void StopFollowing()
+    {
+        if (_followed is not { } settings)
+        {
+            return;
+        }
+
+        settings.Changed -= OnSettingsChanged;
+        _followed = null;
+    }
+
+    private void OnSettingsChanged(object? sender, EventArgs e) => ApplyRestoreMode();
 
     /// <summary>
     /// Re-reads <c>restoreOneMoveAtATime</c>. Turning it off reduces each window's remembered

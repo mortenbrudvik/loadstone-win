@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Loadstone.Core.Platform;
 using Loadstone.UI.Services;
 using Microsoft.Win32;

@@ -56,9 +56,18 @@ public static class VirtualKeys
             [Insert] = "Insert",
             [Delete] = "Delete",
         };
-        for (var c = 'A'; c <= 'Z'; c++) names[c] = c.ToString();
-        for (var d = '0'; d <= '9'; d++) names[d] = d.ToString();
-        for (var i = 0; i < 24; i++) names[F1 + i] = "F" + (i + 1);
+        for (var c = 'A'; c <= 'Z'; c++)
+        {
+            names[c] = c.ToString();
+        }
+        for (var d = '0'; d <= '9'; d++)
+        {
+            names[d] = d.ToString();
+        }
+        for (var i = 0; i < 24; i++)
+        {
+            names[F1 + i] = "F" + (i + 1);
+        }
         return names;
     }
 

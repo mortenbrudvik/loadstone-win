@@ -66,10 +66,11 @@ public sealed class AppModuleTests
     /// setting, so a missing subscription still steps back on the next command; what it cannot do
     /// is drop the in-between frames when the toggle goes off and back on with no command in
     /// between. Both frames are still stacked when the toggle flips: restoring first would leave
-    /// a one-frame stack, and dropping that stack would look the same as leaving it.
+    /// a one-frame stack, and dropping that stack would look the same as leaving it. The module's
+    /// part is the toggle reader it hands the director; App starts the following, as this does.
     /// </summary>
     [WpfFact]
-    public void Load_DirectorFollowsRestoreOneMoveAtATime()
+    public void Load_DirectorFollowsRestoreOneMoveAtATime_OnceAppStartsIt()
     {
         var settings = new InMemorySettings();
         var identity = Substitute.For<IPackageIdentity>();
@@ -89,6 +90,7 @@ public sealed class AppModuleTests
         using var test = new TestWindow();
         var window = Win32Window.For(test.Handle).ShouldNotBeNull();
         var director = container.Resolve<WindowDirector>();
+        director.Follow(settings);
         var start = window.ReadFrame().ShouldNotBeNull();
 
         settings.Update(s => s.RestoreOneMoveAtATime = true);

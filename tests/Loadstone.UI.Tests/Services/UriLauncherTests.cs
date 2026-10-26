@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Loadstone.UI.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;

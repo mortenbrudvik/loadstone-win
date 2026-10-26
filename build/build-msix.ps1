@@ -12,6 +12,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $version = (Get-Content (Join-Path $root 'version.json') -Raw | ConvertFrom-Json).version
+# An empty $version would name the package Loadstone--x64.msix and still satisfy the postcondition
+# that checks the file exists, so catch it here, as build-installer.ps1 does for the Setup.
+if ([string]::IsNullOrWhiteSpace($version)) { throw "version.json has no 'version' value" }
 $stage = Join-Path $root 'packaging/msix/staging'
 $output = Join-Path $root 'installer-output'
 $package = Join-Path $output "Loadstone-$version-x64.msix"

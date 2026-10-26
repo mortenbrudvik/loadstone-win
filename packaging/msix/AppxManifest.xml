@@ -57,7 +57,7 @@
 
   <Capabilities>
     <!-- The only capability. runFullTrust is mandatory for a packaged Win32 app and is a restricted
-         capability: it needs a written justification at submission (see the design spec, section 12).
+         capability: it needs a written justification at submission (see the design spec, section 12, "Distribution").
          No internetClient - Loadstone makes no network calls. -->
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>

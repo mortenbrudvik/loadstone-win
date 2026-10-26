@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Security;
 using NLog.Common;
@@ -13,7 +14,7 @@ internal static class LoggingSetup
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Loadstone", "Logs");
 
     /// <summary>Today's file: what ${shortdate} in <see cref="Build"/> resolves to, spelled out so it can be looked for.</summary>
-    public static string CurrentLogFile => Path.Combine(LogDirectory, $"Loadstone-{DateTime.Now:yyyy-MM-dd}.log");
+    public static string CurrentLogFile => Path.Combine(LogDirectory, $"Loadstone-{DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.log");
 
     /// <summary>
     /// Where NLog reports its own failures. In the temp directory on purpose: what it usually has to

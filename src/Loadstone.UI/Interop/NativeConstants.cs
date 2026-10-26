@@ -1,4 +1,4 @@
-﻿namespace Loadstone.UI.Interop;
+namespace Loadstone.UI.Interop;
 
 internal static class NativeConstants
 {
