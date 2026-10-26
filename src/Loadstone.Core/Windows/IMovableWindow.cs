@@ -21,4 +21,17 @@ public interface IMovableWindow
     /// window is gone or its frame or style could not be read before the write.
     /// </summary>
     CommandOutcome SetFrame(Rect frame);
+
+    /// <summary>
+    /// The placement as the platform keeps it, read so a window found maximized can be put back that
+    /// way. Null when it cannot be read, which the director takes as not maximized.
+    /// </summary>
+    WindowPlacement? ReadPlacement();
+
+    /// <summary>
+    /// Puts back a placement read earlier: the normal frame and the maximized state together, in one
+    /// platform call. Returns Moved, Rejected with the Win32 error, or FrameUnreadable when the window
+    /// is gone.
+    /// </summary>
+    CommandOutcome SetPlacement(WindowPlacement placement);
 }

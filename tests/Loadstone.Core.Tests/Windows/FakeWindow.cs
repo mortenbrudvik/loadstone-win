@@ -39,7 +39,22 @@ public sealed class FakeWindow : IMovableWindow
     /// <summary>An accepted write leaves a frame that can no longer be read back.</summary>
     public bool UnreadableAfterWrite { get; set; }
 
+    /// <summary>
+    /// Maximized right now. A maximized window's <see cref="Frame"/> is its maximized frame; the frame
+    /// it returns to is <see cref="NormalFrame"/>. An accepted <see cref="SetFrame"/> un-maximizes, as
+    /// Win32Window's does.
+    /// </summary>
+    public bool Maximized { get; set; }
+
+    /// <summary>What <see cref="ReadPlacement"/> reports as the normal frame; the current frame when unset.</summary>
+    public Rect? NormalFrame { get; set; }
+
+    /// <summary><see cref="ReadPlacement"/> answers null, as it does for a window whose placement Windows will not give.</summary>
+    public bool PlacementUnreadable { get; set; }
+
     public List<Rect> Writes { get; } = [];
+
+    public List<WindowPlacement> Placements { get; } = [];
 
     /// <summary>How many times the director read the frame; ReadFrame is a method because it is not free.</summary>
     public int Reads { get; private set; }
@@ -61,6 +76,32 @@ public sealed class FakeWindow : IMovableWindow
         else if (outcome.IsMoved && !HoldFrame)
         {
             Frame = FixedSize && Frame is { } old ? Layout.CenteredIn(old, frame) : frame;
+        }
+
+        if (outcome.IsMoved)
+        {
+            Maximized = false;
+        }
+
+        return outcome;
+    }
+
+    public WindowPlacement? ReadPlacement() =>
+        PlacementUnreadable || Frame is not { } frame ? null : new WindowPlacement(NormalFrame ?? frame, Maximized);
+
+    /// <summary>An accepted placement sets the state and the normal frame; a window put back maximized keeps its maximized frame.</summary>
+    public CommandOutcome SetPlacement(WindowPlacement placement)
+    {
+        Placements.Add(placement);
+        var outcome = NextOutcome;
+        if (outcome.IsMoved)
+        {
+            Maximized = placement.Maximized;
+            NormalFrame = placement.NormalFrame;
+            if (!placement.Maximized)
+            {
+                Frame = placement.NormalFrame;
+            }
         }
 
         return outcome;

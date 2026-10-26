@@ -26,3 +26,18 @@ internal struct MONITORINFO
     public RECT rcWork;
     public uint dwFlags;
 }
+
+/// <summary>
+/// Round-tripped whole between GetWindowPlacement and SetWindowPlacement. rcNormalPosition is in
+/// workspace coordinates, which only those two functions understand; see Win32Window.ReadPlacement.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct WINDOWPLACEMENT
+{
+    public uint length;
+    public uint flags;
+    public uint showCmd;
+    public POINT ptMinPosition;
+    public POINT ptMaxPosition;
+    public RECT rcNormalPosition;
+}

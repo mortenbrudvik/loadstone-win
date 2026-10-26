@@ -63,6 +63,14 @@ internal static partial class NativeMethods
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool ShowWindow(nint hWnd, int nCmdShow);
 
+        [LibraryImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool GetWindowPlacement(nint hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+        [LibraryImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool SetWindowPlacement(nint hWnd, ref WINDOWPLACEMENT lpwndpl);
+
         // x64 only: GetWindowLongPtrW does not exist in the 32-bit user32. Loadstone ships x64 only.
         [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
         internal static partial nint GetWindowLongPtr(nint hWnd, int nIndex);

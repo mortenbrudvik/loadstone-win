@@ -7,7 +7,9 @@ namespace Loadstone.Core.Windows;
 /// Runs a <see cref="WindowCommand"/> on an <see cref="IMovableWindow"/>. Keeps the restore ledger:
 /// the frames to put back, recorded only after a write that changes the visible frame. With one-move restore off
 /// (the default) that is the pre-Loadstone frame, kept once and dropped by Restore. With it on, each
-/// accepted move pushes the frame from just before that move, and Restore steps back one.
+/// accepted move pushes the frame from just before that move, and Restore steps back one. A window
+/// that was maximized before a move is remembered by its placement instead, and Restore hands that
+/// back whole, so it goes back maximized rather than as a normal window the size of its maximized frame.
 /// </summary>
 public sealed class WindowDirector
 {
@@ -17,7 +19,7 @@ public sealed class WindowDirector
     /// </summary>
     private const int MaxRememberedFrames = 32;
 
-    private readonly Dictionary<WindowIdentity, List<Rect>> _frames = new();
+    private readonly Dictionary<WindowIdentity, List<RestorePoint>> _frames = new();
     private readonly Func<IReadOnlyList<Display>> _displays;
     private readonly Func<WindowIdentity, bool> _isAlive;
     private readonly Func<bool> _restoreOneMoveAtATime;
@@ -73,6 +75,10 @@ public sealed class WindowDirector
             return Restore(window);
         }
 
+        // Every remaining command moves the window, so what Restore should put back is read here, once,
+        // before anything is written: the frame, and the placement when the window is maximized.
+        var before = PointBefore(window, current);
+
         // Every remaining command places the window on a display, so there is one lookup and one guard
         // for all of them, ahead of the branch. NoDisplay still beats every later answer, exactly as it
         // did when the same guard was written out three times. The two-step lookup is not redundant:
@@ -95,7 +101,7 @@ public sealed class WindowDirector
             // for the same reason Move treats it as lost.
             if (containing is null || Onward(tile, display, displays) is not { } onward)
             {
-                return Apply(target, window, remembering: current);
+                return Apply(target, window, remembering: before);
             }
 
             // Pressed again on a window already in the half, Left and Right Half carry it on. Within
@@ -107,21 +113,29 @@ public sealed class WindowDirector
             // always did.
             if (IsWithinAPixel(current, target))
             {
-                return CarryOnTo(onward, window, current);
+                return CarryOnTo(onward, window, before);
             }
 
-            var outcome = Apply(target, window, remembering: current, out var unchanged);
-            return unchanged ? CarryOnTo(onward, window, current) : outcome;
+            var outcome = Apply(target, window, remembering: before, out var unchanged);
+            return unchanged ? CarryOnTo(onward, window, before) : outcome;
         }
 
         return command switch
         {
-            WindowCommand.Center => Apply(Layout.Centered(current, display.WorkArea), window, remembering: current),
-            WindowCommand.NextDisplay => Move(window, current, display, +1, displays, lost: containing is null),
-            WindowCommand.PreviousDisplay => Move(window, current, display, -1, displays, lost: containing is null),
+            WindowCommand.Center => Apply(Layout.Centered(current, display.WorkArea), window, remembering: before),
+            WindowCommand.NextDisplay => Move(window, before, display, +1, displays, lost: containing is null),
+            WindowCommand.PreviousDisplay => Move(window, before, display, -1, displays, lost: containing is null),
             _ => throw new ArgumentOutOfRangeException(nameof(command), command, "tile commands and Restore are handled above"),
         };
     }
+
+    /// <summary>
+    /// What Restore puts back for a move made now: the frame as sampled, and the placement when the
+    /// window is maximized. A placement that cannot be read is taken as not maximized, so the frame
+    /// is still remembered and Restore writes it as it always did.
+    /// </summary>
+    private static RestorePoint PointBefore(IMovableWindow window, Rect current) =>
+        new(current, window.ReadPlacement() is { Maximized: true } maximized ? maximized : null);
 
     /// <summary>
     /// Snaps <paramref name="window"/> into <paramref name="tile"/> on <paramref name="display"/>: the
@@ -137,13 +151,14 @@ public sealed class WindowDirector
             return CommandOutcome.FrameUnreadable;
         }
 
-        return Apply(tile.Frame(display.WorkArea), window, remembering: current);
+        return Apply(tile.Frame(display.WorkArea), window, remembering: PointBefore(window, current));
     }
 
     /// <summary>
     /// Restore must not record: it would store the current frame and then "restore" to it. The entry
     /// is dropped only once the window has accepted the old frame, so an app that refuses the write
-    /// can still be restored on a later attempt.
+    /// can still be restored on a later attempt. A window that was maximized gets its placement back
+    /// whole rather than its frame: writing the maximized frame would leave a normal window that size.
     /// </summary>
     private CommandOutcome Restore(IMovableWindow window)
     {
@@ -154,8 +169,10 @@ public sealed class WindowDirector
 
         // Off: the oldest frame, then the whole memory. On: the newest frame, then that entry only.
         // A refused write leaves the stack alone, so the same step can be tried again.
-        var frame = _oneMoveAtATime ? stack[^1] : stack[0];
-        var outcome = Apply(frame, window, remembering: null);
+        var point = _oneMoveAtATime ? stack[^1] : stack[0];
+        var outcome = point.Maximized is { } placement
+            ? window.SetPlacement(placement)
+            : Apply(point.Frame, window, remembering: null);
         if (!outcome.IsMoved)
         {
             return outcome;
@@ -188,7 +205,7 @@ public sealed class WindowDirector
     /// a window is centred on the neighbour instead, which is the whole point of pressing Next Display
     /// on a window lost after a disconnect. Every other window is mapped faithfully, overhang and all.
     /// </param>
-    private CommandOutcome Move(IMovableWindow window, Rect current, Display display, int delta, IReadOnlyList<Display> displays, bool lost)
+    private CommandOutcome Move(IMovableWindow window, RestorePoint before, Display display, int delta, IReadOnlyList<Display> displays, bool lost)
     {
         if (ScreenGeometry.Neighbor(display, delta, displays) is not { } neighbor)
         {
@@ -201,10 +218,10 @@ public sealed class WindowDirector
         }
 
         var frame = lost
-            ? Layout.Centered(current, neighbor.WorkArea)
-            : Layout.Mapped(current, display.WorkArea, neighbor.WorkArea);
+            ? Layout.Centered(before.Frame, neighbor.WorkArea)
+            : Layout.Mapped(before.Frame, display.WorkArea, neighbor.WorkArea);
 
-        return Apply(frame, window, remembering: current);
+        return Apply(frame, window, remembering: before);
     }
 
     /// <summary>
@@ -225,10 +242,10 @@ public sealed class WindowDirector
     /// accepted and left the window where it was: an app that ignores writes went nowhere, and saying
     /// it carried on would send whoever reads the log looking on the wrong display.
     /// </summary>
-    private CommandOutcome CarryOnTo((Rect Frame, Side Toward) onward, IMovableWindow window, Rect current)
+    private CommandOutcome CarryOnTo((Rect Frame, Side Toward) onward, IMovableWindow window, RestorePoint before)
     {
-        var outcome = Apply(onward.Frame, window, remembering: current, out var stayed);
-        return stayed ? outcome : outcome with { CarryOn = new CarryOn(onward.Toward, current) };
+        var outcome = Apply(onward.Frame, window, remembering: before, out var stayed);
+        return stayed ? outcome : outcome with { CarryOn = new CarryOn(onward.Toward, before.Frame) };
     }
 
     /// <summary>
@@ -241,7 +258,7 @@ public sealed class WindowDirector
         Math.Abs(frame.Left - target.Left) <= 1 && Math.Abs(frame.Right - target.Right) <= 1
             && Math.Abs(frame.Top - target.Top) <= 1 && Math.Abs(frame.Bottom - target.Bottom) <= 1;
 
-    private CommandOutcome Apply(Rect frame, IMovableWindow window, Rect? remembering) =>
+    private CommandOutcome Apply(Rect frame, IMovableWindow window, RestorePoint? remembering) =>
         Apply(frame, window, remembering, out _);
 
     /// <summary>
@@ -257,7 +274,7 @@ public sealed class WindowDirector
     /// after a refused write, after an unreadable read-back, and whenever <paramref name="remembering"/>
     /// is null (Restore), which takes no read-back at all.
     /// </param>
-    private CommandOutcome Apply(Rect frame, IMovableWindow window, Rect? remembering, out bool unchanged)
+    private CommandOutcome Apply(Rect frame, IMovableWindow window, RestorePoint? remembering, out bool unchanged)
     {
         unchanged = false;
         var outcome = window.SetFrame(frame);
@@ -275,7 +292,7 @@ public sealed class WindowDirector
         // it, so it has to be taken even when there would be nothing new to remember.
         if (remembering is { } previous)
         {
-            unchanged = window.ReadFrame() == previous;
+            unchanged = window.ReadFrame() == previous.Frame;
             if (!unchanged)
             {
                 Remember(window.Identity, previous);
@@ -285,7 +302,13 @@ public sealed class WindowDirector
         return CommandOutcome.Moved;
     }
 
-    private void Remember(WindowIdentity identity, Rect previous)
+    /// <summary>
+    /// What Restore puts back: the visible frame from before a move and, for a window that was
+    /// maximized then, its placement, which Restore hands back whole instead of writing the frame.
+    /// </summary>
+    private readonly record struct RestorePoint(Rect Frame, WindowPlacement? Maximized);
+
+    private void Remember(WindowIdentity identity, RestorePoint previous)
     {
         if (!_frames.TryGetValue(identity, out var stack))
         {

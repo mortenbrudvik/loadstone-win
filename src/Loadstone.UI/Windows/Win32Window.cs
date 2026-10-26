@@ -148,6 +148,53 @@ internal sealed class Win32Window : IMovableWindow
     }
 
     /// <summary>
+    /// The placement as Windows keeps it. The normal position comes back exactly as Windows reports
+    /// it, in workspace coordinates and without the DWM adjustment <see cref="ReadFrame"/> makes, and
+    /// is only ever handed back to <see cref="SetPlacement"/>; nothing tiles with it.
+    /// </summary>
+    public WindowPlacement? ReadPlacement() =>
+        TryReadPlacement(out var placement)
+            ? new WindowPlacement(Displays.ToRect(placement.rcNormalPosition), placement.showCmd == NativeConstants.SW_SHOWMAXIMIZED)
+            : null;
+
+    /// <summary>
+    /// Writes a placement back whole through SetWindowPlacement: the state and the normal frame in one
+    /// call, so a window Loadstone found maximized goes back maximized on the display its normal frame
+    /// is on, and un-maximizes later to that frame. The rest of the structure, the minimized position
+    /// and the flags, is read fresh rather than zeroed, since Windows owns it. Unlike the tile write
+    /// this activates the window, which SetWindowPlacement offers no flag against; Restore acts on
+    /// the window in front, so nothing changes hands.
+    /// </summary>
+    public CommandOutcome SetPlacement(WindowPlacement placement)
+    {
+        if (!TryReadPlacement(out var native))
+        {
+            return CommandOutcome.FrameUnreadable;
+        }
+
+        native.showCmd = placement.Maximized ? NativeConstants.SW_SHOWMAXIMIZED : NativeConstants.SW_SHOWNORMAL;
+        native.rcNormalPosition = new RECT
+        {
+            Left = placement.NormalFrame.Left,
+            Top = placement.NormalFrame.Top,
+            Right = placement.NormalFrame.Right,
+            Bottom = placement.NormalFrame.Bottom,
+        };
+        if (!User32.SetWindowPlacement(Hwnd, ref native))
+        {
+            return CommandOutcome.Rejected(Marshal.GetLastWin32Error());
+        }
+
+        return CommandOutcome.Moved;
+    }
+
+    private bool TryReadPlacement(out WINDOWPLACEMENT placement)
+    {
+        placement = new WINDOWPLACEMENT { length = (uint)Marshal.SizeOf<WINDOWPLACEMENT>() };
+        return User32.IsWindow(Hwnd) && User32.GetWindowPlacement(Hwnd, ref placement);
+    }
+
+    /// <summary>
     /// A restore from maximized or minimized has already changed the window. Reporting the later
     /// failure would leave Restore with no frame to put back.
     /// </summary>

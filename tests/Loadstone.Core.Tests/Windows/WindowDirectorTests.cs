@@ -364,6 +364,106 @@ public class WindowDirectorTests
         restored.ShouldNotContain(before[1]);
     }
 
+    /// <summary>
+    /// The ledger kept a frame only, and Win32Window un-maximizes before it tiles, so Restore after
+    /// tiling a maximized window wrote the maximized frame back as a normal window: the caption showed
+    /// Maximize, a title-bar drag moved it instead of un-maximizing. The entry now carries the placement
+    /// read before the tile, and Restore hands it back whole: maximized, with the frame it un-maximizes
+    /// to, rather than writing a frame at all.
+    /// </summary>
+    [Fact]
+    public void Restore_AfterTilingAMaximizedWindow_PutsItBackMaximized_WithItsNormalFrame()
+    {
+        var window = new FakeWindow(Primary.WorkArea) { Maximized = true, NormalFrame = Start };
+        var director = NewDirector();
+        director.Perform(WindowCommand.LeftHalf, window).ShouldBe(CommandOutcome.Moved);
+        window.Maximized.ShouldBeFalse();
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+
+        window.Maximized.ShouldBeTrue();
+        window.Placements.ShouldBe([new WindowPlacement(Start, true)]);
+        window.Writes.Count.ShouldBe(1);
+        director.RememberedWindowCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Restore_OfAWindowThatWasNotMaximized_WritesTheFrame_NotAPlacement()
+    {
+        var window = new FakeWindow(Start);
+        var director = NewDirector();
+        director.Perform(WindowCommand.LeftHalf, window);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+
+        window.Frame.ShouldBe(Start);
+        window.Placements.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Restore_WhenThePlacementCouldNotBeRead_FallsBackToTheFrame()
+    {
+        // A placement Windows will not give is taken as not maximized: the frame is still remembered,
+        // and Restore writes it as it always did, rather than remembering nothing.
+        var window = new FakeWindow(Primary.WorkArea) { Maximized = true, NormalFrame = Start, PlacementUnreadable = true };
+        var director = NewDirector();
+        director.Perform(WindowCommand.LeftHalf, window).ShouldBe(CommandOutcome.Moved);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+
+        window.Placements.ShouldBeEmpty();
+        window.Frame.ShouldBe(Primary.WorkArea);
+    }
+
+    [Fact]
+    public void Restore_RefusedPlacement_KeepsTheEntryForALaterAttempt()
+    {
+        var window = new FakeWindow(Primary.WorkArea) { Maximized = true, NormalFrame = Start };
+        var director = NewDirector();
+        director.Perform(WindowCommand.LeftHalf, window);
+
+        window.NextOutcome = CommandOutcome.Rejected(5);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Rejected(5));
+        window.Maximized.ShouldBeFalse();
+        director.RememberedWindowCount.ShouldBe(1);
+
+        window.NextOutcome = CommandOutcome.Moved;
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Maximized.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Restore_OneMoveAtATime_StepsBackThroughTheTiles_ThenToMaximized()
+    {
+        var window = new FakeWindow(Primary.WorkArea) { Maximized = true, NormalFrame = Start };
+        var director = NewDirector(() => true);
+        var left = Tile.LeftHalf.Frame(Primary.WorkArea);
+        director.Perform(WindowCommand.LeftHalf, window);
+        director.Perform(WindowCommand.TopRight, window);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Frame.ShouldBe(left);
+        window.Maximized.ShouldBeFalse();
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+        window.Maximized.ShouldBeTrue();
+        window.Placements.ShouldBe([new WindowPlacement(Start, true)]);
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.NothingToRestore);
+    }
+
+    [Fact]
+    public void Snap_OfAMaximizedWindow_RemembersItsPlacementToo()
+    {
+        var window = new FakeWindow(Primary.WorkArea) { Maximized = true, NormalFrame = Start };
+        var director = NewDirector();
+        director.Snap(Tile.RightHalf, window, Secondary).ShouldBe(CommandOutcome.Moved);
+
+        director.Perform(WindowCommand.Restore, window).ShouldBe(CommandOutcome.Moved);
+
+        window.Maximized.ShouldBeTrue();
+        window.Placements.ShouldBe([new WindowPlacement(Start, true)]);
+    }
+
     [Fact]
     public void Restore_WithNoDisplaysAttached_StillRestores()
     {
