@@ -96,7 +96,7 @@ public class ShortcutRowViewModelTests
     [Fact]
     public void CommittingAChordWhileRecording_ShowsTheRegistrationStatusOnceRecordingStops()
     {
-        var vm = new ShortcutsViewModel(_hotkeys);
+        var vm = new ShortcutsViewModel(_hotkeys, () => Task.FromResult(true));
         var row = vm.Groups.SelectMany(g => g.Rows).First(r => r.Command == WindowCommand.LeftHalf);
         var taken = Shortcut.Parse("Ctrl+Alt+Shift+Left");
         _registrar.Register(Arg.Any<WindowCommand>(), taken).Returns(HotkeyStatus.InUse(1409));
@@ -114,7 +114,7 @@ public class ShortcutRowViewModelTests
     public void ShortcutsViewModel_GroupsRowsBySection_AndRestoresDefaults()
     {
         _settings.Current.Shortcuts["leftHalf"] = "Ctrl+Alt+Shift+Left";
-        var vm = new ShortcutsViewModel(_hotkeys);
+        var vm = new ShortcutsViewModel(_hotkeys, () => Task.FromResult(true));
         vm.Groups.Select(g => g.Header).ShouldBe(["Halves", "Corners", "Thirds", "Window", "Displays"]);
         vm.Groups.Sum(g => g.Rows.Count).ShouldBe(WindowCommands.All.Count);
 

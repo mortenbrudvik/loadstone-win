@@ -64,6 +64,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
         _logDirectory = logDirectory;
         LaunchAtLoginMessage = "";
         LaunchAtLoginActionMessage = "";
+        ShellActionMessage = "";
+        CanChangeLaunchAtLogin = true;
         SettingsFileMessage = settings.CanSave
             ? ""
             : "Settings could not be read, so changes this session stay in memory and will not be saved.";
@@ -107,6 +109,14 @@ internal sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool ShowOpenStartupApps { get; set; }
+
+    /// <summary>Why the last shell button did nothing, or empty while the shell has done as asked.</summary>
+    [ObservableProperty]
+    public partial string ShellActionMessage { get; set; }
+
+    /// <summary>False while a policy decides launch at login, so the switch is disabled with the reason beside it.</summary>
+    [ObservableProperty]
+    public partial bool CanChangeLaunchAtLogin { get; set; }
 
     /// <summary>Why a settings change did not reach disk, or empty when the file is fine.</summary>
     [ObservableProperty]
@@ -189,7 +199,8 @@ internal sealed partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenStartupApps() => OpenOrBeep("ms-settings:startupapps");
+    private void OpenStartupApps() =>
+        OpenOrBeep("ms-settings:startupapps", "Could not open Startup Apps; Windows refused. It is under Settings › Apps › Startup.");
 
     /// <summary>
     /// Creates the directory before opening it. NLog makes it on first write, so on a run where
@@ -213,15 +224,22 @@ internal sealed partial class SettingsViewModel : ObservableObject
             _logger.LogError(ex, "could not create the log directory before opening it");
         }
 
-        OpenOrBeep(_logDirectory);
+        OpenOrBeep(_logDirectory, $"Could not open the log folder; Windows refused. It is at {_logDirectory}.");
     }
 
-    /// <summary>Opens the URI, or beeps when nothing handled it: a tray-only app has nowhere to show an error.</summary>
-    private void OpenOrBeep(string uri)
+    /// <summary>
+    /// Opens the URI. When nothing handled it, beeps and says so under the buttons: the beep is the
+    /// cue and the caption the explanation, which is also what a screen reader announces. The tray's
+    /// Help item keeps a bare beep, since no window is on screen there; these two buttons are on one.
+    /// Cleared first, so a later attempt that works takes an earlier refusal down with it.
+    /// </summary>
+    private void OpenOrBeep(string uri, string refused)
     {
+        ShellActionMessage = "";
         if (!_tryOpen(uri))
         {
             _beep();
+            ShellActionMessage = refused;
         }
     }
 
@@ -246,6 +264,11 @@ internal sealed partial class SettingsViewModel : ObservableObject
             or StartupStatus.DisabledInTaskManager or StartupStatus.EnabledByPolicy);
 
         ShowOpenStartupApps = status == StartupStatus.DisabledInTaskManager;
+
+        // Under a policy the write is refused by design (see PackagedStartupRegistration), so the
+        // switch is disabled with the reason beside it rather than left to snap back after a click.
+        // Unknown stays enabled: the read failed, and a write may still tell the user something.
+        CanChangeLaunchAtLogin = status is not (StartupStatus.DisabledByPolicy or StartupStatus.EnabledByPolicy);
         LaunchAtLoginMessage = status switch
         {
             StartupStatus.DisabledInTaskManager => "Disabled in Task Manager › Startup apps.",

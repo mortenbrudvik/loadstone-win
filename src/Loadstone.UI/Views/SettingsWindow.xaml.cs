@@ -10,6 +10,7 @@ using Loadstone.UI.Interop;
 using Loadstone.UI.ViewModels;
 using Loadstone.UI.Windows;
 using Microsoft.Extensions.Logging;
+using Wpf.Ui;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 using static Loadstone.UI.Interop.NativeMethods;
@@ -21,13 +22,18 @@ internal partial class SettingsWindow : FluentWindow
 {
     private readonly ILogger<SettingsWindow> _logger;
 
-    public SettingsWindow(SettingsViewModel general, ShortcutsViewModel shortcuts, ILogger<SettingsWindow> logger)
+    public SettingsWindow(SettingsViewModel general, ShortcutsViewModel shortcuts, IContentDialogService dialogs, ILogger<SettingsWindow> logger)
     {
         _logger = logger;
         InitializeComponent();
         General = general;
         Shortcuts = shortcuts;
         DataContext = this;
+
+        // The one dialog host in the app. The Shortcuts tab's "Restore defaults" asks through the
+        // service before clearing anything, and the host has to be registered before that button
+        // can be clicked, which this constructor guarantees: the button lives in this window.
+        dialogs.SetDialogHost(DialogHost);
         if (AppIconFrame(32, logger) is { } frame)
         {
             SettingsTitleBar.Icon = new ImageIcon { Source = frame };

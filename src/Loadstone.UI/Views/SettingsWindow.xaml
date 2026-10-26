@@ -7,6 +7,7 @@
     xmlns:controls="clr-namespace:Loadstone.UI.Controls"
     xmlns:views="clr-namespace:Loadstone.UI.Views"
     xmlns:vm="clr-namespace:Loadstone.UI.ViewModels"
+    xmlns:sys="clr-namespace:System;assembly=System.Runtime"
     Title="Loadstone Settings"
     Icon="pack://application:,,,/Loadstone;component/Assets/loadstone.ico"
     Width="520"
@@ -21,6 +22,9 @@
   <ui:FluentWindow.Resources>
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     <views:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
+    <!-- Each caption is also its switch's help text for assistive technology, so one string serves both and they cannot drift apart. -->
+    <sys:String x:Key="DragSnappingCaption">Turning this on switches off Windows' own drag-to-edge snapping while Loadstone runs, so the two do not fight. It comes back when you turn this off, when Loadstone quits, or when you sign out.</sys:String>
+    <sys:String x:Key="RestoreOneMoveCaption">Off, Restore (Ctrl+Alt+Backspace by default) jumps back to where the window was before Loadstone first moved it. On, each press steps back one move — hotkey or drag snap — until that original spot.</sys:String>
   </ui:FluentWindow.Resources>
 
   <Grid>
@@ -48,46 +52,55 @@
 
             <ui:Card Margin="0,0,0,12">
               <StackPanel>
-                <ui:ToggleSwitch Content="Snap windows by dragging to screen edges" IsChecked="{Binding DragSnappingEnabled}" />
+                <ui:ToggleSwitch
+                    Content="Snap windows by dragging to screen edges"
+                    IsChecked="{Binding DragSnappingEnabled}"
+                    AutomationProperties.HelpText="{StaticResource DragSnappingCaption}" />
                 <ui:TextBlock
                     Margin="0,8,0,0"
                     Appearance="Secondary"
                     FontTypography="Caption"
                     TextWrapping="Wrap"
-                    Text="Turning this on switches off Windows' own drag-to-edge snapping while Loadstone runs, so the two do not fight. It comes back when you turn this off, when Loadstone quits, or when you sign out." />
-              </StackPanel>
-            </ui:Card>
-
-            <ui:Card Margin="0,0,0,12">
-              <StackPanel>
-                <ui:ToggleSwitch Content="Restore one move at a time" IsChecked="{Binding RestoreOneMoveAtATime}" />
-                <ui:TextBlock
-                    Margin="0,8,0,0"
-                    Appearance="Secondary"
-                    FontTypography="Caption"
-                    TextWrapping="Wrap"
-                    Text="Off, Restore (Ctrl+Alt+Backspace by default) jumps back to where the window was before Loadstone first moved it. On, each press steps back one move — hotkey or drag snap — until that original spot." />
+                    Text="{StaticResource DragSnappingCaption}" />
               </StackPanel>
             </ui:Card>
 
             <ui:Card Margin="0,0,0,12">
               <StackPanel>
                 <ui:ToggleSwitch
+                    Content="Restore one move at a time"
+                    IsChecked="{Binding RestoreOneMoveAtATime}"
+                    AutomationProperties.HelpText="{StaticResource RestoreOneMoveCaption}" />
+                <ui:TextBlock
+                    Margin="0,8,0,0"
+                    Appearance="Secondary"
+                    FontTypography="Caption"
+                    TextWrapping="Wrap"
+                    Text="{StaticResource RestoreOneMoveCaption}" />
+              </StackPanel>
+            </ui:Card>
+
+            <ui:Card Margin="0,0,0,12">
+              <StackPanel>
+                <!-- Disabled, not merely explained, while a policy decides it: the write would be refused and the switch would snap back. -->
+                <ui:ToggleSwitch
                     Content="Launch at login"
                     IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}"
+                    IsEnabled="{Binding CanChangeLaunchAtLogin}"
                     Command="{Binding SetLaunchAtLoginCommand}"
-                    CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=IsChecked}" />
+                    CommandParameter="{Binding RelativeSource={RelativeSource Self}, Path=IsChecked}"
+                    AutomationProperties.HelpText="{Binding LaunchAtLoginMessage}" />
                 <DockPanel Margin="0,8,0,0">
-                  <ui:Button
-                      DockPanel.Dock="Right"
-                      Content="Open Startup Apps"
-                      Command="{Binding OpenStartupAppsCommand}"
-                      Visibility="{Binding ShowOpenStartupApps, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                  <ui:Button
-                      DockPanel.Dock="Right"
-                      Margin="8,0,0,0"
-                      Content="Open log folder"
-                      Command="{Binding OpenLogFolderCommand}" />
+                  <!-- One panel for both buttons, in reading order: tab order follows the tree, and two
+                       buttons each docked right were tabbed right to left and sat flush when both showed. -->
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
+                    <ui:Button Content="Open log folder" Command="{Binding OpenLogFolderCommand}" />
+                    <ui:Button
+                        Margin="8,0,0,0"
+                        Content="Open Startup Apps"
+                        Command="{Binding OpenStartupAppsCommand}"
+                        Visibility="{Binding ShowOpenStartupApps, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                  </StackPanel>
                   <ui:TextBlock
                       VerticalAlignment="Center"
                       Appearance="Secondary"
@@ -96,6 +109,14 @@
                       AutomationProperties.LiveSetting="Polite"
                       Text="{Binding LaunchAtLoginMessage}" />
                 </DockPanel>
+                <ui:TextBlock
+                    Margin="0,4,0,0"
+                    Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                    FontTypography="Caption"
+                    TextWrapping="Wrap"
+                    AutomationProperties.LiveSetting="Polite"
+                    Text="{Binding ShellActionMessage}"
+                    Visibility="{Binding ShellActionMessage, Converter={StaticResource StringToVisibilityConverter}}" />
                 <ui:TextBlock
                     Margin="0,4,0,0"
                     Foreground="{DynamicResource SystemFillColorCautionBrush}"
@@ -120,15 +141,15 @@
       </TabItem>
 
       <TabItem Header="Shortcuts">
-        <DockPanel DataContext="{Binding Shortcuts}" Margin="0,12,0,0">
-          <ui:Button
-              DockPanel.Dock="Bottom"
-              Margin="0,12,16,0"
-              HorizontalAlignment="Right"
-              Content="Restore defaults"
-              Command="{Binding RestoreDefaultsCommand}" />
+        <!-- A grid rather than a dock panel, so the scroll viewer can be declared before the button that sits
+             below it: tab order follows the tree, and a reset button declared first was the tab's first stop. -->
+        <Grid DataContext="{Binding Shortcuts}" Margin="0,12,0,0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
           <!-- WPF-UI paints the bar over the content (ColumnSpan=2, 14px). Keep the recorders out of that strip. -->
-          <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
+          <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
             <ItemsControl ItemsSource="{Binding Groups}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:ShortcutGroupViewModel}">
@@ -167,10 +188,19 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
           </ScrollViewer>
-        </DockPanel>
+          <ui:Button
+              Grid.Row="1"
+              Margin="0,12,16,0"
+              HorizontalAlignment="Right"
+              Content="Restore defaults"
+              Command="{Binding RestoreDefaultsCommand}" />
+        </Grid>
       </TabItem>
 
     </TabControl>
+
+    <!-- Last, so it paints over everything above when a dialog is up. Registered on the dialog service in the constructor. -->
+    <ui:ContentDialogHost x:Name="DialogHost" Grid.RowSpan="2" />
   </Grid>
 
 </ui:FluentWindow>
