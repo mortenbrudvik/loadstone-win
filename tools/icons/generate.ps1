@@ -61,16 +61,17 @@ function Write-Png([string]$path, [int]$size, [scriptblock]$draw) {
 }
 
 # Everything is drawn in a 64-unit square and scaled to the frame, so strokes scale with the icon.
-# The stone is traced from the reference photo, scaled so it is 50 units wide and 34 tall about
-# (32, 33): four anchors at top, right, bottom and left with handles of uneven length. The long
-# handles along the top and bottom toward the right and the short vertical ones at the right anchor
-# are what draw the stone out to its rounded point; the left is full and round.
+# The stone is traced from the reference photo but a little rounder in proportion than the photo's
+# stone, 46 units wide and 37 tall about (32, 33): four anchors at top, right, bottom and left with
+# handles of uneven length. The long handles along the top and bottom toward the right and the short
+# vertical ones at the right anchor are what draw the stone out to its rounded point; the left is
+# full and round.
 function New-PebblePath {
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $p.AddBezier(27.0, 15.8, 46.0, 15.8, 57.2, 31.5, 57.2, 36.0)
-    $p.AddBezier(57.2, 36.0, 57.2, 40.5, 49.5, 50.2, 30.0, 50.2)
-    $p.AddBezier(30.0, 50.2, 17.5, 50.2, 7.2, 43.8, 7.2, 33.8)
-    $p.AddBezier(7.2, 33.8, 7.2, 23.8, 15.0, 15.8, 27.0, 15.8)
+    $p.AddBezier(27.5, 14.5, 44.0, 14.5, 55.0, 31.0, 55.0, 36.0)
+    $p.AddBezier(55.0, 36.0, 55.0, 41.0, 48.0, 51.5, 30.5, 51.5)
+    $p.AddBezier(30.5, 51.5, 18.5, 51.5, 9.0, 44.5, 9.0, 33.5)
+    $p.AddBezier(9.0, 33.5, 9.0, 22.5, 16.0, 14.5, 27.5, 14.5)
     $p.CloseFigure()
     return $p
 }
@@ -148,7 +149,7 @@ function Draw-Pebble($g, [int]$size, [float]$fill, [float]$edge) {
     $path = New-PebblePath
 
     if ($edge -eq 0) {
-        $shadow = New-Pool 34 51 46 9 0
+        $shadow = New-Pool 33 52.5 44 9 0
         Fill-Pool $g $shadow 110 0 0 0
         $shadow.Dispose()
     }
@@ -215,9 +216,9 @@ function Draw-Pebble($g, [int]$size, [float]$fill, [float]$edge) {
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
-Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s 1.08 0 }
-Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.15 1.6 }
-Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.15 0.5 }
+Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s 1.12 0 }
+Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 1.6 }
+Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 0.5 }
 
 function New-RoundedRect([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -263,7 +264,7 @@ function Write-Splash([string]$path, [double]$scale, [bool]$light) {
     $pg.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $pg.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $pg.Clear([System.Drawing.Color]::Transparent)
-    Draw-Pebble $pg $pebbleSize 1.08 $(if ($light) { 0 } else { 0.5 })
+    Draw-Pebble $pg $pebbleSize 1.12 $(if ($light) { 0 } else { 0.5 })
     $pg.Dispose()
     $g.DrawImage($pebble, [int](($w - $pebbleSize) / 2), [int][math]::Round(30 * $scale), $pebbleSize, $pebbleSize)
     $pebble.Dispose()
@@ -298,7 +299,7 @@ New-Item -ItemType Directory -Force $MsixAssetDir | Out-Null
 # Square44x44Logo and Square150x150Logo at every scale the Store asks for, StoreLogo at two, and the
 # targetsize variants for the taskbar. Without an _altform-unplated variant Windows draws the icon on
 # a coloured backplate.
-$appIcon = { param($g, $s) Draw-Pebble $g $s 1.08 0 }
+$appIcon = { param($g, $s) Draw-Pebble $g $s 1.12 0 }
 
 foreach ($scale in 100, 125, 150, 200, 400) {
     Write-Png (Join-Path $MsixAssetDir "Square44x44Logo.scale-$scale.png")   ([int][math]::Round(44 * $scale / 100.0))  $appIcon
@@ -314,7 +315,7 @@ foreach ($scale in 100, 200) {
 # selection outside high-contrast mode). tray-dark.ico's edge of 1.6 is tuned for exactly this
 # "separate from a dark bar at 16 px" case; on a light bar the pebble is dark enough that it reads
 # fine either way, so the same value is the one that works on both.
-$unplatedIcon = { param($g, $s) Draw-Pebble $g $s 1.08 1.6 }
+$unplatedIcon = { param($g, $s) Draw-Pebble $g $s 1.12 1.6 }
 
 foreach ($target in 16, 24, 32, 48, 256) {
     Write-Png (Join-Path $MsixAssetDir "Square44x44Logo.targetsize-$target.png") $target $appIcon
