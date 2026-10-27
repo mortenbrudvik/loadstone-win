@@ -19,6 +19,17 @@ namespace Loadstone.UI.Tests.Tray;
 public class TrayControllerTests
 {
     /// <summary>
+    /// The Help item opens the Windows user guide on brudvik.com, beside the Mac one, since
+    /// 2026-10-27; before that it opened a GitHub Pages site, which now refreshes to this address.
+    /// The installer's support URL is pinned to the same constant by InnoScriptTests.
+    /// </summary>
+    [Fact]
+    public void HelpUrl_IsTheWindowsGuideOnBrudvikCom()
+    {
+        TrayController.HelpUrl.ShouldBe("https://brudvik.com/loadstone/help/windows");
+    }
+
+    /// <summary>
     /// A system light/dark change used to re-pick only the icon. The app theme - which the tray
     /// menu's WPF-UI styles draw from - was applied once at startup and then followed the system
     /// only through the Settings window's watcher, which exists only once Settings has been opened.
