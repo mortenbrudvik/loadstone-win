@@ -24,7 +24,7 @@
 ; The user guide, not the GitHub repository: a tester who clicks Support in Settings > Apps wants
 ; the shortcuts and the troubleshooting list, not source code. Same URL as TrayController.HelpUrl,
 ; and InnoScriptTests pins the two together.
-#define AppUrl "https://brudvik.com/loadstone/help/windows"
+#define AppUrl "https://brudvik.com/loadstone/windows/help"
 ; Generated once on 2026-09-10 and never to be changed: it is the installer's identity, and an
 ; upgrade recognises a previous install only by it. AppId writes it as {{#AppIdGuid} - the extra
 ; leading brace is Inno's escape - so the directive resolves to exactly {GUID}.

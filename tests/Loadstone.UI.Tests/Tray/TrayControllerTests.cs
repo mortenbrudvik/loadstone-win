@@ -26,7 +26,7 @@ public class TrayControllerTests
     [Fact]
     public void HelpUrl_IsTheWindowsGuideOnBrudvikCom()
     {
-        TrayController.HelpUrl.ShouldBe("https://brudvik.com/loadstone/help/windows");
+        TrayController.HelpUrl.ShouldBe("https://brudvik.com/loadstone/windows/help");
     }
 
     /// <summary>

@@ -32,7 +32,7 @@ namespace Loadstone.UI.Tray;
 /// </summary>
 internal sealed class TrayController : IDisposable
 {
-    public const string HelpUrl = "https://brudvik.com/loadstone/help/windows";
+    public const string HelpUrl = "https://brudvik.com/loadstone/windows/help";
 
     private readonly ICommandDispatcher _dispatcher;
     private readonly HotkeyCenter _hotkeys;

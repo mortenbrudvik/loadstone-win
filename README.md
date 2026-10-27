@@ -116,7 +116,7 @@ a purchased certificate and is not planned for the beta channel.
 
 ## Troubleshooting
 
-Tray → Loadstone → **Loadstone Help** opens <https://brudvik.com/loadstone/help/windows>, the user guide, which carries the shortcuts, the drag zones and this troubleshooting list beside the Mac app's guide.
+Tray → Loadstone → **Loadstone Help** opens <https://brudvik.com/loadstone/windows/help>, the user guide, which carries the shortcuts, the drag zones and this troubleshooting list beside the Mac app's guide.
 
 **One window will not move.** Windows of programs running as administrator cannot be moved by a program that isn't, and some windows are fixed-size. Loadstone beeps and logs the refusal; everything else keeps working. Fixed-size windows are centered in the tile instead of resized.
 
