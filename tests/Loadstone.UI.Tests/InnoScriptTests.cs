@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Loadstone.UI.Services;
+using Loadstone.UI.Tray;
 using Shouldly;
 using Xunit;
 
@@ -99,6 +100,18 @@ public sealed class InnoScriptTests
 
         RepoFile.Match(Script, @"#define AppExeName ""([^""]+)""").ShouldBe($"{assembly}.exe");
         Directive(RepoFile.Text(Script), "CloseApplicationsFilter").ShouldBe($"{assembly}.exe");
+    }
+
+    /// <summary>
+    /// Support in Settings > Apps opens AppUrl; the tray's Help item opens TrayController.HelpUrl.
+    /// They are the same page, and the one is a comment away from the other, so a move of the guide
+    /// that updates the constant and forgets the script would send testers to a page that refreshes
+    /// on, or in time to nothing at all.
+    /// </summary>
+    [Fact]
+    public void AppUrl_MatchesTheTrayHelpUrl()
+    {
+        RepoFile.Match(Script, @"#define AppUrl ""([^""]+)""").ShouldBe(TrayController.HelpUrl);
     }
 
     /// <summary>
