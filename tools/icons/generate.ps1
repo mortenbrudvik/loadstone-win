@@ -1,7 +1,7 @@
 # Regenerates the .ico assets. Run with the 64-bit PowerShell:
 #   & 'C:\Program Files\PowerShell\7\pwsh.exe' -File tools/icons/generate.ps1
-# The icon is a lodestone: a smooth black pebble, near round and polished to a gloss, lit from the
-# top left. A broad soft reflection lies on its shoulder with a hot spot where it meets the rim, a
+# The icon is a lodestone: a smooth black pebble, a touch off round the way a real one is, polished
+# to a gloss and lit from the top left. A broad soft reflection lies on its shoulder with a hot spot where it meets the rim, a
 # thin rim light runs along the lower left where the stone turns away from the light, a faint bounce
 # of light sits on the lower right, and the app icon casts a soft shadow beneath.
 # loadstone.ico  : the app icon, the shaded pebble on a transparent ground
@@ -59,13 +59,37 @@ function Write-Png([string]$path, [int]$size, [scriptblock]$draw) {
 }
 
 # Everything is drawn in a 64-unit square and scaled to the frame, so strokes scale with the icon.
-# The stone is a disc a touch wider than it is tall, centred at (32, 32).
-$script:StoneX = 8.0; $script:StoneY = 9.0; $script:StoneW = 48.0; $script:StoneH = 46.0
-
+# The stone is an oval about (32, 32), a touch wider than tall and not quite symmetrical: four
+# anchors at top, right, bottom and left with handles of uneven length, so it is fuller at the top
+# right and flatter at the lower left. A circle's handles would all be 13.25 here.
 function New-PebblePath {
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $p.AddEllipse($script:StoneX, $script:StoneY, $script:StoneW, $script:StoneH)
+    $p.AddBezier(30.5, 9.0, 45.0, 9.0, 56.5, 17.5, 56.5, 30.0)
+    $p.AddBezier(56.5, 30.0, 56.5, 43.0, 46.5, 55.5, 33.0, 55.5)
+    $p.AddBezier(33.0, 55.5, 20.0, 55.5, 8.0, 45.0, 8.0, 34.0)
+    $p.AddBezier(8.0, 34.0, 8.0, 20.5, 18.5, 9.0, 30.5, 9.0)
+    $p.CloseFigure()
     return $p
+}
+
+# Strokes a stretch of the stone's edge, inset a little, between two bearings measured clockwise
+# from three o'clock about the centre. The outline is not an ellipse, so this flattens an inset copy
+# of it and draws the points that fall in the range, in bearing order.
+function Draw-Rim($g, $path, $pen, [float]$inset, [float]$from, [float]$to) {
+    $copy = [System.Drawing.Drawing2D.GraphicsPath]$path.Clone()
+    $m = New-Object System.Drawing.Drawing2D.Matrix
+    $k = 1.0 - $inset / 24.0
+    $m.Translate(32.0, 32.0); $m.Scale($k, $k); $m.Translate(-32.0, -32.0)
+    $copy.Transform($m); $m.Dispose()
+    $copy.Flatten($null, 0.05)
+    $run = foreach ($pt in $copy.PathPoints) {
+        $bearing = [math]::Atan2($pt.Y - 32.0, $pt.X - 32.0) * 180.0 / [math]::PI
+        if ($bearing -lt 0) { $bearing += 360.0 }
+        if ($bearing -ge $from -and $bearing -le $to) { [pscustomobject]@{ Bearing = $bearing; Point = $pt } }
+    }
+    $points = [System.Drawing.PointF[]]@($run | Sort-Object Bearing | ForEach-Object { $_.Point })
+    if ($points.Count -ge 2) { $g.DrawLines($pen, $points) }
+    $copy.Dispose()
 }
 
 # A rotated ellipse: the pools of light are all this shape. $angle is in degrees about its centre.
@@ -140,7 +164,7 @@ function Draw-Pebble($g, [int]$size, [float]$fill, [float]$edge) {
     $g.SetClip($path)
     $pane = New-Object System.Drawing.Drawing2D.GraphicsPath
     $pane.FillMode = [System.Drawing.Drawing2D.FillMode]::Alternate
-    $pane.AddEllipse($script:StoneX, $script:StoneY, $script:StoneW, $script:StoneH)
+    $pane.AddPath($path, $false)
     # The cut circle sits further down and right for the tray variants, which thickens the crescent
     # so the glint survives 16 px.
     $cut = 12.5 + 1.0 * $edge
@@ -161,21 +185,19 @@ function Draw-Pebble($g, [int]$size, [float]$fill, [float]$edge) {
     $hot.Dispose(); $bounce.Dispose()
     $g.ResetClip()
 
-    # Two rim lights. GDI+ measures arcs clockwise from three o'clock, so 195 to 285 degrees is the
-    # upper left, where the pane meets the edge and the rim catches the light, and 100 to 185 is the
-    # lower left, where the stone turns away from the light and the ground throws a little back.
+    # Two rim lights, by bearing clockwise from three o'clock: 195 to 285 degrees is the upper left,
+    # where the pane meets the edge and the rim catches the light, and 100 to 185 is the lower left,
+    # where the stone turns away from the light and the ground throws a little back.
     function New-RimPen([int]$alpha, [float]$width, [int]$r, [int]$green, [int]$b) {
         $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb($alpha, $r, $green, $b)), $width
         $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round; $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
         return $pen
     }
-    $inset = 0.8
-    $x = [float]($script:StoneX + $inset); $y = [float]($script:StoneY + $inset)
-    $w = [float]($script:StoneW - 2 * $inset); $h = [float]($script:StoneH - 2 * $inset)
     $upper = New-RimPen ([int][math]::Min(220, 120 + 50 * $edge)) (0.9 + 0.8 * $edge) 255 255 255
-    $g.DrawArc($upper, $x, $y, $w, $h, 195.0, 90.0)
+    Draw-Rim $g $path $upper 0.8 195.0 285.0
     $lower = New-RimPen ([int][math]::Min(200, 70 + 50 * $edge)) (1.0 + 1.2 * $edge) 190 196 204
-    $g.DrawArc($lower, $x, $y, $w, $h, 100.0, 85.0)
+    Draw-Rim $g $path $lower 0.8 100.0 185.0
     $upper.Dispose(); $lower.Dispose()
 
     if ($edge -gt 0) {
