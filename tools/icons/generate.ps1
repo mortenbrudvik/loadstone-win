@@ -1,7 +1,11 @@
 # Regenerates the .ico assets. Run with the 64-bit PowerShell:
 #   & 'C:\Program Files\PowerShell\7\pwsh.exe' -File tools/icons/generate.ps1
-# The icon is a lodestone: a polished black pebble, broad at the top and narrowing toward one
-# corner, lit from the top left with a soft highlight and a faint reflection along its lower rim.
+# The icon is a lodestone: a smooth black river stone, wider than it is tall, full and round on the
+# left and drawn out to a rounded point on the right, with a satin rather than a glassy finish. It
+# is lit from the top left: a broad soft light on the upper-left shoulder, a faint sheen across the
+# flat crown, a soft reflection along the top edge out to the point, the stone's side showing as a
+# lighter band along the lower-left edge with a thin bright line where the ground throws light back,
+# and, under the app icon only, a soft shadow.
 # loadstone.ico  : the app icon, the shaded pebble on a transparent ground
 # tray-dark.ico  : the same pebble for the dark taskbar, with a stronger edge so it separates from the bar
 # tray-light.ico : the same pebble for the light taskbar, with a lighter touch of that edge
@@ -57,102 +61,165 @@ function Write-Png([string]$path, [int]$size, [scriptblock]$draw) {
 }
 
 # Everything is drawn in a 64-unit square and scaled to the frame, so strokes scale with the icon.
-function Add-Bezier($path, [float[]]$pts) {
-    for ($i = 0; $i + 7 -lt $pts.Count; $i += 6) {
-        $path.AddBezier($pts[$i], $pts[$i + 1], $pts[$i + 2], $pts[$i + 3], $pts[$i + 4], $pts[$i + 5], $pts[$i + 6], $pts[$i + 7])
-    }
-    return $path
-}
-
+# The stone is traced from the reference photo but a little rounder in proportion than the photo's
+# stone, 46 units wide and 37 tall about (32, 33): four anchors at top, right, bottom and left with
+# handles of uneven length. The long handles along the top and bottom toward the right and the short
+# vertical ones at the right anchor are what draw the stone out to its rounded point; the left is
+# full and round.
 function New-PebblePath {
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath
-    Add-Bezier $p @(
-        24, 12, 38, 8, 54, 18, 58, 30,
-        58, 30, 61, 40, 52, 54, 40, 57,
-        40, 57, 30, 59, 18, 60, 14, 52,
-        14, 52, 10, 44, 10, 26, 16, 18,
-        16, 18, 18, 15, 21, 13, 24, 12) | Out-Null
+    $p.AddBezier(27.5, 14.5, 44.0, 14.5, 55.0, 31.0, 55.0, 36.0)
+    $p.AddBezier(55.0, 36.0, 55.0, 41.0, 48.0, 51.5, 30.5, 51.5)
+    $p.AddBezier(30.5, 51.5, 18.5, 51.5, 9.0, 44.5, 9.0, 33.5)
+    $p.AddBezier(9.0, 33.5, 9.0, 22.5, 16.0, 14.5, 27.5, 14.5)
     $p.CloseFigure()
     return $p
 }
 
-# World transform: unit square to the frame, with the pebble enlarged about its centre so it fills
-# the frame the way Windows app icons do (about 84 percent) or a tray glyph does (about 90 percent).
+# Strokes a stretch of the stone's edge, inset a little, between two bearings measured clockwise
+# from three o'clock about the centre. The outline is not an ellipse, so this flattens an inset copy
+# of it and draws the points that fall in the range, in bearing order.
+function Draw-Rim($g, $path, $pen, [float]$inset, [float]$from, [float]$to) {
+    $copy = [System.Drawing.Drawing2D.GraphicsPath]$path.Clone()
+    $m = New-Object System.Drawing.Drawing2D.Matrix
+    $k = 1.0 - $inset / 24.0
+    $m.Translate(32.0, 32.0); $m.Scale($k, $k); $m.Translate(-32.0, -32.0)
+    $copy.Transform($m); $m.Dispose()
+    $copy.Flatten($null, 0.05)
+    $run = foreach ($pt in $copy.PathPoints) {
+        $bearing = [math]::Atan2($pt.Y - 32.0, $pt.X - 32.0) * 180.0 / [math]::PI
+        if ($bearing -lt 0) { $bearing += 360.0 }
+        if ($bearing -ge $from -and $bearing -le $to) { [pscustomobject]@{ Bearing = $bearing; Point = $pt } }
+    }
+    $sorted = @($run | Sort-Object Bearing)
+    # Two passes at just over half strength, the second stopping short of both ends, so the stroke
+    # fades in and out instead of stopping with a round cap, the way light on a rim does.
+    $soft = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb([int]($pen.Color.A * 0.55), $pen.Color)), $pen.Width
+    $soft.StartCap = $pen.StartCap; $soft.EndCap = $pen.EndCap; $soft.LineJoin = $pen.LineJoin
+    $margin = [math]::Min(12.0, ($to - $from) / 4.0)
+    foreach ($pass in @(@($from, $to), @(($from + $margin), ($to - $margin)))) {
+        $points = [System.Drawing.PointF[]]@($sorted | Where-Object { $_.Bearing -ge $pass[0] -and $_.Bearing -le $pass[1] } | ForEach-Object { $_.Point })
+        if ($points.Count -ge 2) { $g.DrawLines($soft, $points) }
+    }
+    $soft.Dispose(); $copy.Dispose()
+}
+
+# A rotated ellipse: the pools of light are all this shape. $angle is in degrees about its centre.
+function New-Pool([float]$cx, [float]$cy, [float]$w, [float]$h, [float]$angle) {
+    $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $p.AddEllipse($cx - $w / 2, $cy - $h / 2, $w, $h)
+    $m = New-Object System.Drawing.Drawing2D.Matrix
+    $m.RotateAt($angle, (New-Object System.Drawing.PointF $cx, $cy))
+    $p.Transform($m); $m.Dispose()
+    return $p
+}
+
+# Fills a pool with light that is $alpha strong at its centre and gone at its edge, the fade
+# front-loaded so the pool reads as a soft reflection rather than a flat disc.
+function Fill-Pool($g, $pool, [int]$alpha, [int]$r = 255, [int]$green = 255, [int]$b = 255) {
+    $brush = New-Object System.Drawing.Drawing2D.PathGradientBrush $pool
+    $blend = New-Object System.Drawing.Drawing2D.ColorBlend 3
+    $blend.Colors = @(
+        [System.Drawing.Color]::FromArgb(0, $r, $green, $b),
+        [System.Drawing.Color]::FromArgb([int]($alpha * 0.35), $r, $green, $b),
+        [System.Drawing.Color]::FromArgb($alpha, $r, $green, $b))
+    $blend.Positions = [single[]]@(0.0, 0.5, 1.0)
+    $brush.InterpolationColors = $blend
+    $g.FillPath($brush, $pool)
+    $brush.Dispose()
+}
+
+# World transform: unit square to the frame, with the pebble enlarged about its centre. The stone is
+# wider than tall, so it is sized by width: about 90 percent of an app icon frame, and all but a
+# sliver of a tray frame, where a wide glyph otherwise looks small beside square ones.
 function Set-World($g, [int]$size, [float]$fill) {
     $m = New-Object System.Drawing.Drawing2D.Matrix
     $m.Scale($size / 64.0, $size / 64.0)
-    $m.Translate(35.0, 34.5)
+    $m.Translate(32.0, 32.0)
     $m.Scale($fill, $fill)
-    $m.Translate(-35.0, -34.5)
+    $m.Translate(-32.0, -32.0)
     $g.Transform = $m
     $m.Dispose()
 }
 
-# $edge is 0 for the app icon. Higher values thicken the highlights and add a grey outline so the
-# stone separates from a dark taskbar at 16 px.
+# $edge is 0 for the app icon. Higher values strengthen the highlights and add a grey outline so the
+# stone separates from a dark taskbar at 16 px; the ground shadow is drawn only at 0, since the tray
+# variants sit on the bar and want nothing beneath them.
 function Draw-Pebble($g, [int]$size, [float]$fill, [float]$edge) {
     Set-World $g $size $fill
     $path = New-PebblePath
 
-    # Body: near-black at the rim rising to a grey sheen where the light lands.
+    if ($edge -eq 0) {
+        $shadow = New-Pool 33 52.5 44 9 0
+        Fill-Pool $g $shadow 110 0 0 0
+        $shadow.Dispose()
+    }
+
+    # Body: near-black at the rim, lifting to a dark grey where the light lands up and to the left.
     $body = New-Object System.Drawing.Drawing2D.PathGradientBrush $path
-    $body.CenterPoint = New-Object System.Drawing.PointF 27, 24
+    $body.CenterPoint = New-Object System.Drawing.PointF 24, 27
     $blend = New-Object System.Drawing.Drawing2D.ColorBlend 4
     $blend.Colors = @(
-        [System.Drawing.Color]::FromArgb(255, 13, 15, 18),
-        [System.Drawing.Color]::FromArgb(255, 22, 25, 28),
-        [System.Drawing.Color]::FromArgb(255, 44, 48, 54),
-        [System.Drawing.Color]::FromArgb(255, 92, 97, 104))
-    $blend.Positions = [single[]]@(0.0, 0.18, 0.58, 1.0)
+        [System.Drawing.Color]::FromArgb(255, 12, 13, 15),
+        [System.Drawing.Color]::FromArgb(255, 26, 27, 30),
+        [System.Drawing.Color]::FromArgb(255, 46, 48, 52),
+        [System.Drawing.Color]::FromArgb(255, 74, 77, 82))
+    $blend.Positions = [single[]]@(0.0, 0.14, 0.5, 1.0)
     $body.InterpolationColors = $blend
     $g.FillPath($body, $path)
     $body.Dispose()
 
-    # Specular pool on the shoulder: a soft rotated ellipse fading to nothing.
-    $spot = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $spot.AddEllipse(14.0, 16.0, 26.0, 16.0)
-    $rot = New-Object System.Drawing.Drawing2D.Matrix
-    $rot.RotateAt(-18.0, (New-Object System.Drawing.PointF 27, 24))
-    $spot.Transform($rot); $rot.Dispose()
-    $shine = New-Object System.Drawing.Drawing2D.PathGradientBrush $spot
-    $shineBlend = New-Object System.Drawing.Drawing2D.ColorBlend 3
-    $shineAlpha = [int][math]::Min(220, 140 + 40 * $edge)
-    $shineBlend.Colors = @(
-        [System.Drawing.Color]::FromArgb(0, 255, 255, 255),
-        [System.Drawing.Color]::FromArgb(36, 255, 255, 255),
-        [System.Drawing.Color]::FromArgb($shineAlpha, 255, 255, 255))
-    $shineBlend.Positions = [single[]]@(0.0, 0.45, 1.0)
-    $shine.InterpolationColors = $shineBlend
+    # Satin light, all soft pools clipped to the stone: a broad one on the upper-left shoulder with a
+    # brighter heart where the crown meets the rim, a faint sheen across the flat crown, and a faint
+    # bounce from the ground on the lower right.
     $g.SetClip($path)
-    $g.FillPath($shine, $spot)
+    $crown = New-Pool 22 24 34 20 -22
+    Fill-Pool $g $crown ([int][math]::Min(170, 95 + 35 * $edge)) 230 233 238
+    $shoulder = New-Pool 14 22 18 12 -35
+    Fill-Pool $g $shoulder ([int][math]::Min(220, 150 + 40 * $edge)) 235 238 242
+    $sheen = New-Pool 34 31 26 12 -12
+    Fill-Pool $g $sheen 26 220 224 230
+    $bounce = New-Pool 44 45 22 7 20
+    Fill-Pool $g $bounce 30 200 206 214
+    $crown.Dispose(); $shoulder.Dispose(); $sheen.Dispose(); $bounce.Dispose()
     $g.ResetClip()
-    $shine.Dispose(); $spot.Dispose()
 
-    # A crisp highlight along the top edge and a faint reflection along the lower rim.
-    $topWidth = 1.4 + 1.6 * $edge; $rimWidth = 1.2 + 1.8 * $edge
-    $topAlpha = [int][math]::Min(230, 82 + 60 * $edge); $rimAlpha = [int][math]::Min(230, 128 + 50 * $edge)
-    $top = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb($topAlpha, 255, 255, 255)), $topWidth
-    $top.StartCap = [System.Drawing.Drawing2D.LineCap]::Round; $top.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $topPath = Add-Bezier (New-Object System.Drawing.Drawing2D.GraphicsPath) @(22, 13, 32, 9, 46, 12, 54, 22)
-    $g.DrawPath($top, $topPath)
-    $rim = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb($rimAlpha, 154, 162, 170)), $rimWidth
-    $rim.StartCap = [System.Drawing.Drawing2D.LineCap]::Round; $rim.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $rimPath = Add-Bezier (New-Object System.Drawing.Drawing2D.GraphicsPath) @(57, 36, 56, 46, 48, 55, 36, 58)
-    $g.DrawPath($rim, $rimPath)
+    # Rim lights, by bearing clockwise from three o'clock. The top edge, 235 to 345 degrees, carries
+    # a soft wide reflection set a little in from the edge with a thinner, brighter line at the edge
+    # itself over its middle; the lower edge, 20 to 200 degrees, from the point round the bottom to
+    # the left, a thin line where the ground throws light back.
+    function New-RimPen([int]$alpha, [float]$width, [int]$r, [int]$green, [int]$b) {
+        $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb($alpha, $r, $green, $b)), $width
+        $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round; $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+        return $pen
+    }
+    $topSoft = New-RimPen ([int][math]::Min(150, 55 + 20 * $edge)) (2.4 + 1.0 * $edge) 205 210 216
+    Draw-Rim $g $path $topSoft 1.8 235.0 345.0
+    $topLine = New-RimPen ([int][math]::Min(190, 90 + 50 * $edge)) (0.8 + 0.6 * $edge) 255 255 255
+    Draw-Rim $g $path $topLine 0.6 255.0 335.0
+    # The side of the stone shows along the lower-left edge as a wide soft band, with the thin bright
+    # line at the edge itself; the band runs from the point round to the left, the line a little less.
+    $side = New-RimPen ([int][math]::Min(120, 50 + 12 * $edge)) (3.0 + 1.0 * $edge) 170 176 184
+    Draw-Rim $g $path $side 1.9 20.0 200.0
+    $lower = New-RimPen ([int][math]::Min(210, 110 + 50 * $edge)) (1.0 + 1.0 * $edge) 200 206 214
+    Draw-Rim $g $path $lower 0.7 30.0 195.0
+    $topSoft.Dispose(); $topLine.Dispose(); $side.Dispose(); $lower.Dispose()
+
     if ($edge -gt 0) {
-        $outline = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb([int](70 * $edge), 138, 146, 153)), (1.2 * $edge)
+        $outline = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb([int](32 * $edge), 150, 158, 166)), (1.0 * $edge)
         $g.DrawPath($outline, $path)
         $outline.Dispose()
     }
-    $top.Dispose(); $topPath.Dispose(); $rim.Dispose(); $rimPath.Dispose(); $path.Dispose()
+    $path.Dispose()
     $g.ResetTransform()
 }
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
-Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s 1.12 0 }
-Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 1.6 }
-Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 0.5 }
+Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s 1.26 0 }
+Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.34 1.6 }
+Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.34 0.5 }
 
 function New-RoundedRect([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -198,7 +265,7 @@ function Write-Splash([string]$path, [double]$scale, [bool]$light) {
     $pg.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $pg.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $pg.Clear([System.Drawing.Color]::Transparent)
-    Draw-Pebble $pg $pebbleSize 1.12 $(if ($light) { 0 } else { 0.5 })
+    Draw-Pebble $pg $pebbleSize 1.26 $(if ($light) { 0 } else { 0.5 })
     $pg.Dispose()
     $g.DrawImage($pebble, [int](($w - $pebbleSize) / 2), [int][math]::Round(30 * $scale), $pebbleSize, $pebbleSize)
     $pebble.Dispose()
@@ -233,7 +300,7 @@ New-Item -ItemType Directory -Force $MsixAssetDir | Out-Null
 # Square44x44Logo and Square150x150Logo at every scale the Store asks for, StoreLogo at two, and the
 # targetsize variants for the taskbar. Without an _altform-unplated variant Windows draws the icon on
 # a coloured backplate.
-$appIcon = { param($g, $s) Draw-Pebble $g $s 1.12 0 }
+$appIcon = { param($g, $s) Draw-Pebble $g $s 1.26 0 }
 
 foreach ($scale in 100, 125, 150, 200, 400) {
     Write-Png (Join-Path $MsixAssetDir "Square44x44Logo.scale-$scale.png")   ([int][math]::Round(44 * $scale / 100.0))  $appIcon
@@ -249,7 +316,7 @@ foreach ($scale in 100, 200) {
 # selection outside high-contrast mode). tray-dark.ico's edge of 1.6 is tuned for exactly this
 # "separate from a dark bar at 16 px" case; on a light bar the pebble is dark enough that it reads
 # fine either way, so the same value is the one that works on both.
-$unplatedIcon = { param($g, $s) Draw-Pebble $g $s 1.12 1.6 }
+$unplatedIcon = { param($g, $s) Draw-Pebble $g $s 1.26 1.6 }
 
 foreach ($target in 16, 24, 32, 48, 256) {
     Write-Png (Join-Path $MsixAssetDir "Square44x44Logo.targetsize-$target.png") $target $appIcon
