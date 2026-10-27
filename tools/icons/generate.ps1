@@ -129,8 +129,9 @@ function Fill-Pool($g, $pool, [int]$alpha, [int]$r = 255, [int]$green = 255, [in
     $brush.Dispose()
 }
 
-# World transform: unit square to the frame, with the pebble enlarged about its centre so it fills
-# the frame the way Windows app icons do (about 84 percent) or a tray glyph does (about 90 percent).
+# World transform: unit square to the frame, with the pebble enlarged about its centre. The stone is
+# wider than tall, so it is sized by width: about 90 percent of an app icon frame, and all but a
+# sliver of a tray frame, where a wide glyph otherwise looks small beside square ones.
 function Set-World($g, [int]$size, [float]$fill) {
     $m = New-Object System.Drawing.Drawing2D.Matrix
     $m.Scale($size / 64.0, $size / 64.0)
@@ -216,9 +217,9 @@ function Draw-Pebble($g, [int]$size, [float]$fill, [float]$edge) {
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
-Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s 1.12 0 }
-Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 1.6 }
-Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.2 0.5 }
+Write-Ico (Join-Path $OutDir 'loadstone.ico') @(16, 24, 32, 48, 64, 128, 256) { param($g, $s) Draw-Pebble $g $s 1.26 0 }
+Write-Ico (Join-Path $OutDir 'tray-dark.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.34 1.6 }
+Write-Ico (Join-Path $OutDir 'tray-light.ico') @(16, 20, 24, 32, 48) { param($g, $s) Draw-Pebble $g $s 1.34 0.5 }
 
 function New-RoundedRect([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {
     $p = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -264,7 +265,7 @@ function Write-Splash([string]$path, [double]$scale, [bool]$light) {
     $pg.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $pg.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $pg.Clear([System.Drawing.Color]::Transparent)
-    Draw-Pebble $pg $pebbleSize 1.12 $(if ($light) { 0 } else { 0.5 })
+    Draw-Pebble $pg $pebbleSize 1.26 $(if ($light) { 0 } else { 0.5 })
     $pg.Dispose()
     $g.DrawImage($pebble, [int](($w - $pebbleSize) / 2), [int][math]::Round(30 * $scale), $pebbleSize, $pebbleSize)
     $pebble.Dispose()
@@ -299,7 +300,7 @@ New-Item -ItemType Directory -Force $MsixAssetDir | Out-Null
 # Square44x44Logo and Square150x150Logo at every scale the Store asks for, StoreLogo at two, and the
 # targetsize variants for the taskbar. Without an _altform-unplated variant Windows draws the icon on
 # a coloured backplate.
-$appIcon = { param($g, $s) Draw-Pebble $g $s 1.12 0 }
+$appIcon = { param($g, $s) Draw-Pebble $g $s 1.26 0 }
 
 foreach ($scale in 100, 125, 150, 200, 400) {
     Write-Png (Join-Path $MsixAssetDir "Square44x44Logo.scale-$scale.png")   ([int][math]::Round(44 * $scale / 100.0))  $appIcon
@@ -315,7 +316,7 @@ foreach ($scale in 100, 200) {
 # selection outside high-contrast mode). tray-dark.ico's edge of 1.6 is tuned for exactly this
 # "separate from a dark bar at 16 px" case; on a light bar the pebble is dark enough that it reads
 # fine either way, so the same value is the one that works on both.
-$unplatedIcon = { param($g, $s) Draw-Pebble $g $s 1.12 1.6 }
+$unplatedIcon = { param($g, $s) Draw-Pebble $g $s 1.26 1.6 }
 
 foreach ($target in 16, 24, 32, 48, 256) {
     Write-Png (Join-Path $MsixAssetDir "Square44x44Logo.targetsize-$target.png") $target $appIcon
