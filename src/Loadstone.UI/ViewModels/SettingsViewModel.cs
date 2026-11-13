@@ -1,6 +1,3 @@
-using System.IO;
-using System.Reflection;
-using System.Security;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Loadstone.Core.Platform;
@@ -19,7 +16,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private readonly ILogger<SettingsViewModel> _logger;
     private readonly Func<string, bool> _tryOpen;
     private readonly Action _beep;
-    private readonly string _logDirectory;
 
     /// <summary>
     /// Echo suppression, raised while the view model assigns its own properties so that showing state
@@ -39,29 +35,27 @@ internal sealed partial class SettingsViewModel : ObservableObject
     private bool _writing;
 
     public SettingsViewModel(ISettingsService settings, IStartupRegistration startup, ILogger<SettingsViewModel> logger)
-        : this(settings, startup, logger, uri => UriLauncher.TryOpen(uri, logger), Feedback.Beep, LoggingSetup.LogDirectory)
+        : this(settings, startup, logger, uri => UriLauncher.TryOpen(uri, logger), Feedback.Beep)
     {
     }
 
     /// <summary>
-    /// The shell and the log directory as seams, the way <c>CommandDispatcher</c> takes its focused
-    /// window and its beep: through the public constructor, <see cref="OpenLogFolder"/> creates the
-    /// real log directory and starts Explorer on it, which no test may do.
+    /// The shell as a seam, the way <c>CommandDispatcher</c> takes its focused window and its beep:
+    /// through the public constructor, <see cref="OpenStartupApps"/> opens the real Settings app,
+    /// which no test may do.
     /// </summary>
     internal SettingsViewModel(
         ISettingsService settings,
         IStartupRegistration startup,
         ILogger<SettingsViewModel> logger,
         Func<string, bool> tryOpen,
-        Action beep,
-        string logDirectory)
+        Action beep)
     {
         _settings = settings;
         _startup = startup;
         _logger = logger;
         _tryOpen = tryOpen;
         _beep = beep;
-        _logDirectory = logDirectory;
         LaunchAtLoginMessage = "";
         LaunchAtLoginActionMessage = "";
         ShellActionMessage = "";
@@ -110,7 +104,7 @@ internal sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool ShowOpenStartupApps { get; set; }
 
-    /// <summary>Why the last shell button did nothing, or empty while the shell has done as asked.</summary>
+    /// <summary>Why Open Startup Apps did nothing, or empty while the shell has done as asked.</summary>
     [ObservableProperty]
     public partial string ShellActionMessage { get; set; }
 
@@ -121,11 +115,6 @@ internal sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Why a settings change did not reach disk, or empty when the file is fine.</summary>
     [ObservableProperty]
     public partial string SettingsFileMessage { get; set; }
-
-    public string Version { get; } =
-        Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
-        ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
-        ?? "?";
 
     partial void OnDragSnappingEnabledChanged(bool value)
     {
@@ -203,34 +192,9 @@ internal sealed partial class SettingsViewModel : ObservableObject
         OpenOrBeep("ms-settings:startupapps", "Could not open Startup Apps; Windows refused. It is under Settings › Apps › Startup.");
 
     /// <summary>
-    /// Creates the directory before opening it. NLog makes it on first write, so on a run where
-    /// logging failed — exactly when a user is sent looking — it is not there and the shell would
-    /// beep instead of showing anything.
-    /// </summary>
-    [RelayCommand]
-    private void OpenLogFolder()
-    {
-        try
-        {
-            Directory.CreateDirectory(_logDirectory);
-        }
-        // Wider than this path is likely to need, on purpose: an escape from a button click on the UI
-        // thread ends the process and takes the hotkeys and the user's edge snapping with it, which is
-        // the rule IStartupRegistration states about itself twice. CreateDirectory can also answer
-        // ArgumentException or NotSupportedException for a path it will not accept.
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException
-            or ArgumentException or NotSupportedException)
-        {
-            _logger.LogError(ex, "could not create the log directory before opening it");
-        }
-
-        OpenOrBeep(_logDirectory, $"Could not open the log folder; Windows refused. It is at {_logDirectory}.");
-    }
-
-    /// <summary>
-    /// Opens the URI. When nothing handled it, beeps and says so under the buttons: the beep is the
+    /// Opens the URI. When nothing handled it, beeps and says so under the button: the beep is the
     /// cue and the caption the explanation, which is also what a screen reader announces. The tray's
-    /// Help item keeps a bare beep, since no window is on screen there; these two buttons are on one.
+    /// Help item keeps a bare beep, since no window is on screen there; this button is on one.
     /// Cleared first, so a later attempt that works takes an earlier refusal down with it.
     /// </summary>
     private void OpenOrBeep(string uri, string refused)

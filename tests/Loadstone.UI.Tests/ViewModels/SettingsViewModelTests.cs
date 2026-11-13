@@ -1,4 +1,3 @@
-using System.IO;
 using Loadstone.Core.Platform;
 using Loadstone.UI.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,25 +7,17 @@ using Xunit;
 
 namespace Loadstone.UI.Tests.ViewModels;
 
-public sealed class SettingsViewModelTests : IDisposable
+public sealed class SettingsViewModelTests
 {
     private readonly InMemorySettings _settings = new();
     private readonly IStartupRegistration _startup = Substitute.For<IStartupRegistration>();
     private readonly List<string> _opened = [];
-    private readonly string _scratch = Path.Combine(Path.GetTempPath(), "LoadstoneTests", Guid.NewGuid().ToString("N"));
-    private string _logDirectory;
     private bool _shellOpens = true;
     private int _beeps;
 
-    public SettingsViewModelTests()
-    {
-        _logDirectory = Path.Combine(_scratch, "Logs");
-    }
-
     /// <summary>
     /// The internal constructor, so no test ever hands a URI to the shell: through the public one,
-    /// OpenLogFolder starts Explorer on the real log folder, which is exactly what a test run must
-    /// not do.
+    /// OpenStartupApps opens the real Settings app, which is exactly what a test run must not do.
     /// </summary>
     private SettingsViewModel NewViewModel() => new(
         _settings,
@@ -37,16 +28,7 @@ public sealed class SettingsViewModelTests : IDisposable
             _opened.Add(uri);
             return _shellOpens;
         },
-        () => _beeps++,
-        _logDirectory);
-
-    public void Dispose()
-    {
-        if (Directory.Exists(_scratch))
-        {
-            Directory.Delete(_scratch, recursive: true);
-        }
-    }
+        () => _beeps++);
 
     [Fact]
     public void Construction_ReadsTheDragSettingAndStartupStatus()
@@ -312,71 +294,10 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     /// <summary>
-    /// The About card shows a version, not a commit: the informational version carries a "+sha" suffix
-    /// on any build with source link, and the split is the only thing that keeps it off the card.
-    /// </summary>
-    [Fact]
-    public void Version_IsTheInformationalVersionWithoutItsBuildMetadata()
-    {
-        var version = NewViewModel().Version;
-
-        version.ShouldNotBeNullOrWhiteSpace();
-        version.ShouldNotContain("+");
-        version.ShouldNotBe("?");
-    }
-
-    /// <summary>
-    /// NLog creates the log directory on first write, so on a run where logging failed - exactly when
-    /// a user is sent looking - it is not there yet. The command creates it first, so the shell has
-    /// something to open rather than beeping. The path itself is the literal %LOCALAPPDATA%\Loadstone\Logs
-    /// in both channels - MSIX does not redirect file-system writes for this package - so the button
-    /// is a convenience, not the only honest way to name it.
-    /// </summary>
-    [Fact]
-    public void OpenLogFolder_CreatesTheDirectory_ThenHandsItToTheShell()
-    {
-        Directory.Exists(_logDirectory).ShouldBeFalse();
-
-        NewViewModel().OpenLogFolderCommand.Execute(null);
-
-        Directory.Exists(_logDirectory).ShouldBeTrue();
-        _opened.ShouldBe([_logDirectory]);
-        _beeps.ShouldBe(0);
-    }
-
-    /// <summary>
-    /// A creation that is refused must not escape: a throw from a button click on the UI thread ends
-    /// the process and takes the hotkeys and the user's edge snapping with it. The shell still gets
-    /// the path, and answers for itself.
-    /// </summary>
-    [Fact]
-    public void OpenLogFolder_StillHandsThePathToTheShell_WhenTheDirectoryCannotBeCreated()
-    {
-        _logDirectory = Path.Combine(_scratch, "not<a>directory", "Logs");
-
-        Should.NotThrow(() => NewViewModel().OpenLogFolderCommand.Execute(null));
-
-        _opened.ShouldBe([_logDirectory]);
-    }
-
-    /// <summary>
     /// The beep used to be the whole failure report, on the theory that a tray-only app has nowhere
-    /// to show one. These two buttons live on the General tab of a window that is on screen, so the
-    /// refusal is also explained there, where a screen reader can announce it. The path is in the
-    /// message because the folder is what the user was after.
+    /// to show one. This button lives on the General tab of a window that is on screen, so the
+    /// refusal is also explained there, where a screen reader can announce it.
     /// </summary>
-    [Fact]
-    public void OpenLogFolder_WhenTheShellRefuses_BeepsAndExplains()
-    {
-        _shellOpens = false;
-
-        var vm = NewViewModel();
-        vm.OpenLogFolderCommand.Execute(null);
-
-        _beeps.ShouldBe(1);
-        vm.ShellActionMessage.ShouldContain(_logDirectory);
-    }
-
     [Fact]
     public void OpenStartupApps_WhenTheShellRefuses_BeepsAndExplains()
     {
@@ -391,15 +312,15 @@ public sealed class SettingsViewModelTests : IDisposable
 
     /// <summary>A later attempt that works must not leave the earlier refusal on screen.</summary>
     [Fact]
-    public void OpenLogFolder_WhenTheShellOpensIt_ClearsAnEarlierRefusal()
+    public void OpenStartupApps_WhenTheShellOpensIt_ClearsAnEarlierRefusal()
     {
         _shellOpens = false;
         var vm = NewViewModel();
-        vm.OpenLogFolderCommand.Execute(null);
+        vm.OpenStartupAppsCommand.Execute(null);
         vm.ShellActionMessage.ShouldNotBeNullOrWhiteSpace();
 
         _shellOpens = true;
-        vm.OpenLogFolderCommand.Execute(null);
+        vm.OpenStartupAppsCommand.Execute(null);
 
         vm.ShellActionMessage.ShouldBeEmpty();
     }

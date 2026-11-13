@@ -22,13 +22,17 @@ internal partial class SettingsWindow : FluentWindow
 {
     private readonly ILogger<SettingsWindow> _logger;
 
-    public SettingsWindow(SettingsViewModel general, ShortcutsViewModel shortcuts, IContentDialogService dialogs, ILogger<SettingsWindow> logger)
+    public SettingsWindow(SettingsViewModel general, ShortcutsViewModel shortcuts, AboutViewModel about, IContentDialogService dialogs, ILogger<SettingsWindow> logger)
     {
         _logger = logger;
         InitializeComponent();
         General = general;
         Shortcuts = shortcuts;
+        About = about;
         DataContext = this;
+
+        // The miniature desktop shows the chord each command is bound to right now, not the defaults.
+        AboutDesktop.ShortcutOf = about.ShortcutOf;
 
         // The one dialog host in the app. The Shortcuts tab's "Restore defaults" asks through the
         // service before clearing anything, and the host has to be registered before that button
@@ -112,6 +116,8 @@ internal partial class SettingsWindow : FluentWindow
     public SettingsViewModel General { get; }
 
     public ShortcutsViewModel Shortcuts { get; }
+
+    public AboutViewModel About { get; }
 
     /// <summary>
     /// Brings the window to the front and shows the current <see cref="IStartupRegistration.Status"/>.

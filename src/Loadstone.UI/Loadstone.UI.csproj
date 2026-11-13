@@ -17,9 +17,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Also read straight out of the .g resources, with no pack URI; see LoadstoneArt. -->
     <Resource Include="Assets\*.ico" />
-    <!-- Read by WPF's SplashScreen out of the .g resources, not through a pack URI; see StartupSplash. -->
-    <Resource Include="Assets\Splash\*.png" />
   </ItemGroup>
 
   <ItemGroup>

@@ -89,6 +89,7 @@ public sealed class AppModule : Module
         builder.RegisterType<ContentDialogService>().As<IContentDialogService>().SingleInstance();
         builder.RegisterType<SettingsViewModel>().AsSelf().SingleInstance();
         builder.RegisterType<ShortcutsViewModel>().AsSelf().SingleInstance();
+        builder.RegisterType<AboutViewModel>().AsSelf().SingleInstance();
         builder.RegisterType<SettingsWindow>().AsSelf().SingleInstance();
     }
 }

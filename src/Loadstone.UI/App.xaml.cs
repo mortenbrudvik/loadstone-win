@@ -68,9 +68,10 @@ public partial class App : Application
         }
 
         // Before the host, so it covers the part of startup that takes time; after the single-instance
-        // handshake, so a second launch that only asks the first to open Settings never flashes it. There
-        // is no logger yet, so a failure is held here and written once there is, and startup goes on
-        // without the splash.
+        // handshake, so a second launch that only asks the first to open Settings never flashes it. It
+        // runs on a thread of its own and Show returns at once, so a splash that cannot be built is
+        // reported by CloseAsync, below; what can throw here is starting that thread. There is no logger
+        // yet, so that failure is held and written once there is, and startup goes on without the splash.
         StartupSplash? splash = null;
         Exception? splashFailure = null;
         try

@@ -1,77 +1,113 @@
-using System.Diagnostics;
 using System.IO;
 using System.Security;
 using System.Windows;
 using System.Windows.Threading;
-using Loadstone.UI.Windows;
+using Loadstone.UI.Views;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 
 namespace Loadstone.UI.Services;
 
 /// <summary>
-/// The image shown while Loadstone starts. WPF's own <see cref="SplashScreen"/> rather than a window of
-/// ours: it is not a <see cref="Window"/>, so it never takes <see cref="Application.MainWindow"/> - the
-/// slot the Settings window holds, because WPF-UI's theme manager dresses whatever window is in it - and
-/// it is up before the host and WPF-UI have loaded. The Mac app has no splash; this is Windows-only
-/// behaviour.
+/// The splash shown while Loadstone starts: <see cref="SplashWindow"/> on a thread and a dispatcher of
+/// its own. The app's dispatcher does not pump until <c>OnStartup</c> returns, so a window on it could
+/// neither draw nor move during the very part of startup the splash is for; on its own thread it is
+/// drawn while the host is still being built. A window built off the app's thread is also never given
+/// <see cref="Application.MainWindow"/>, the slot the Settings window holds because WPF-UI's theme
+/// manager dresses whatever window is in it. The Mac app has no splash; this is Windows-only behaviour.
 /// </summary>
+/// <remarks>
+/// Nothing on the splash thread may take the process down: an exception that escapes a thread that is
+/// not the app's goes straight to the fatal handler, and the hotkeys and the user's edge snapping go
+/// with it. So the thread's dispatcher handles its own exceptions, shuts itself down, and leaves the
+/// failure here for <see cref="CloseAsync"/> to write, since startup has no logger when the splash begins.
+/// </remarks>
 internal sealed class StartupSplash
 {
     /// <summary>
-    /// How long the splash stays up however quickly startup finished. It never holds startup back: the
-    /// hotkeys and the drag monitor are already live while it is still showing.
+    /// How long the splash stays up however quickly startup finished: long enough for the windows to
+    /// land and the name to be read. It never holds startup back: the hotkeys and the drag monitor are
+    /// already live while it is still showing.
     /// </summary>
-    internal static readonly TimeSpan MinimumShown = TimeSpan.FromSeconds(1.5);
+    internal static readonly TimeSpan MinimumShown = TimeSpan.FromSeconds(2);
 
-    private static readonly TimeSpan FadeOut = TimeSpan.FromSeconds(0.3);
+    /// <summary>How long it waits after the pointer last moved over it or clicked the stone, so there is time to play.</summary>
+    internal static readonly TimeSpan InteractionHold = TimeSpan.FromSeconds(1.5);
 
-    /// <summary>The scales tools/icons/generate.ps1 draws the splash at, in percent.</summary>
-    private static readonly int[] Scales = [100, 150, 200];
+    internal static readonly TimeSpan FadeOut = TimeSpan.FromSeconds(0.3);
 
-    private readonly SplashScreen _screen;
-    private readonly Dispatcher _dispatcher;
-    private readonly Stopwatch _shown;
+    private readonly TaskCompletionSource<SplashWindow> _shown = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Exception? _failure;
 
-    private StartupSplash(SplashScreen screen, Dispatcher dispatcher, Stopwatch shown)
+    private StartupSplash()
     {
-        _screen = screen;
-        _dispatcher = dispatcher;
-        _shown = shown;
     }
 
     /// <summary>
-    /// Shows the splash, topmost and centred on the primary display, in the app theme Windows is set to.
-    /// Throws when the image cannot be loaded: the caller has no logger yet, so it is the one that holds
-    /// on to the exception until there is somewhere to write it.
+    /// Starts the splash, topmost and centred on the primary display, in the app theme Windows is set
+    /// to, and returns at once: the window is built and shown on its own thread while startup goes on.
+    /// A splash that could not be shown is reported by <see cref="CloseAsync"/>, when there is a logger.
+    /// Throws only when the thread itself cannot be started.
     /// </summary>
-    public static StartupSplash Show()
-    {
-        // SplashScreen centres itself on the primary display (SM_CXSCREEN), so that display's DPI is the
-        // one the image has to be drawn for. An empty snapshot leaves the 100 percent image.
-        var dpi = Displays.Snapshot() is [var primary, ..] ? primary.Dpi : 96;
-        var screen = new SplashScreen(typeof(StartupSplash).Assembly, ResourceName(dpi, IsAppThemeLight()));
+    public static StartupSplash Show() => Show(IsAppThemeLight(), SystemParameters.ClientAreaAnimation, MinimumShown);
 
-        // Topmost is ours to ask for: the splash is this process's own window.
-        screen.Show(autoClose: false, topMost: true);
-        return new StartupSplash(screen, Dispatcher.CurrentDispatcher, Stopwatch.StartNew());
+    /// <summary>The same, with the theme, the motion and the minimum given, so a test need neither read the registry nor wait two seconds.</summary>
+    internal static StartupSplash Show(bool light, bool animate, TimeSpan minimumShown)
+    {
+        var splash = new StartupSplash();
+        var thread = new Thread(() => splash.Run(light, animate, minimumShown))
+        {
+            // Background, so a quit while the splash is still up does not wait for it.
+            IsBackground = true,
+            Name = "Loadstone splash",
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return splash;
     }
 
     /// <summary>
-    /// Fades the splash out once it has been up for <see cref="MinimumShown"/>, and completes when the
-    /// fade has finished. Never faults: the caller discards the task, and a fault here would otherwise
-    /// become an unobserved-task exception instead of a splash that simply did not fade.
+    /// Tells the splash that startup is done, and completes when the splash has gone: it fades once it
+    /// has been up for its minimum and the pointer has left it alone. Never faults: the caller discards
+    /// the task, and a fault here would otherwise become an unobserved-task exception instead of a
+    /// splash that simply did not show.
     /// </summary>
     public async Task CloseAsync(ILogger logger)
     {
         try
         {
-            await Task.Delay(RemainingDelay(_shown.Elapsed));
+            SplashWindow window;
+            try
+            {
+                window = await _shown.Task;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "could not show the splash screen; starting without it");
+                return;
+            }
 
-            // Marshalled explicitly rather than trusting the continuation to land on the UI thread: the
-            // splash window belongs to the thread that showed it.
-            await _dispatcher.InvokeAsync(() => _screen.Close(FadeOut));
-            await Task.Delay(FadeOut);
+            if (window.Problem is { } problem)
+            {
+                logger.LogWarning("{Problem}", problem);
+            }
+
+            try
+            {
+                // The window belongs to the splash thread, so the request is posted to it.
+                await window.Dispatcher.InvokeAsync(window.CloseWhenDue);
+            }
+            catch (OperationCanceledException)
+            {
+                // The user clicked it away before startup finished, and its dispatcher has gone with it.
+            }
+
+            await _ended.Task;
+            if (_failure is { } failure)
+            {
+                logger.LogWarning(failure, "the splash screen failed and was taken down");
+            }
         }
         catch (Exception ex)
         {
@@ -80,19 +116,48 @@ internal sealed class StartupSplash
     }
 
     /// <summary>
-    /// The packed image for a display at <paramref name="dpi"/>: the nearest scale drawn, the larger one
-    /// on a tie, since a splash slightly too large reads better than one slightly too small. Lowercase
-    /// because that is how the build keys the assembly's .g resources, and SplashScreen looks it up there.
+    /// How long the splash has left: the rest of its minimum, or the rest of the wait after the pointer
+    /// last played with it, whichever is longer, and never negative. A pointer that never touched it
+    /// (<paramref name="sinceInteraction"/> null) leaves only the minimum.
     /// </summary>
-    internal static string ResourceName(int dpi, bool lightTheme)
+    internal static TimeSpan RemainingDelay(TimeSpan shown, TimeSpan? sinceInteraction, TimeSpan minimumShown)
     {
-        var percent = dpi * 100.0 / 96;
-        var scale = Scales.MinBy(s => (Math.Abs(s - percent), -s));
-        return $"assets/splash/splash-{(lightTheme ? "light" : "dark")}.scale-{scale}.png";
+        var minimum = minimumShown - shown;
+        var hold = sinceInteraction is { } since ? InteractionHold - since : TimeSpan.Zero;
+        var remaining = minimum > hold ? minimum : hold;
+        return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
     }
 
-    /// <summary>What is left of <see cref="MinimumShown"/>; zero once startup took longer than that.</summary>
-    internal static TimeSpan RemainingDelay(TimeSpan elapsed) => elapsed >= MinimumShown ? TimeSpan.Zero : MinimumShown - elapsed;
+    private void Run(bool light, bool animate, TimeSpan minimumShown)
+    {
+        try
+        {
+            var dispatcher = Dispatcher.CurrentDispatcher;
+            dispatcher.UnhandledException += (_, e) =>
+            {
+                e.Handled = true;
+                _failure ??= e.Exception;
+                dispatcher.BeginInvokeShutdown(DispatcherPriority.Send);
+            };
+
+            var window = new SplashWindow(light, animate, minimumShown);
+            window.Closed += (_, _) => dispatcher.BeginInvokeShutdown(DispatcherPriority.Background);
+            window.Show();
+            _shown.TrySetResult(window);
+            Dispatcher.Run();
+        }
+        catch (Exception ex)
+        {
+            if (!_shown.TrySetException(ex))
+            {
+                _failure ??= ex;
+            }
+        }
+        finally
+        {
+            _ended.TrySetResult();
+        }
+    }
 
     /// <summary>
     /// The app theme, not the taskbar's: the Settings window follows this one, and the splash is its

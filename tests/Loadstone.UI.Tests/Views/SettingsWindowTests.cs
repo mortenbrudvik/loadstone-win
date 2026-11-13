@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -190,28 +191,87 @@ public class SettingsWindowTests
     }
 
     /// <summary>
-    /// Both buttons docked right, and the one declared first lands rightmost, so the tree order and
-    /// with it the Tab order ran right to left; and with both visible nothing kept them apart.
+    /// Open Startup Apps shows only when Task Manager is what switched Loadstone off, and it is the one
+    /// shell button left on this tab: Open log folder went to About, with the other places a user is
+    /// sent from there.
     /// </summary>
     [WpfFact]
-    public void GeneralTab_ShellButtons_ReadLeftToRight_WithAGapBetween()
+    public void GeneralTab_OffersOpenStartupApps_WhenTaskManagerDisabledIt()
     {
         var (window, _) = ShownWindowWith(HotkeyStatus.Registered, StartupStatus.DisabledInTaskManager);
         try
         {
             SelectTab(window, "General");
 
-            var buttons = Descendants<Button>(window)
-                .Where(button => button.Content is "Open log folder" or "Open Startup Apps")
-                .ToList();
-            buttons.Select(button => (string)button.Content).ShouldBe(["Open log folder", "Open Startup Apps"]);
-            buttons.ShouldAllBe(button => button.IsVisible);
+            var buttons = Descendants<Button>(window).Where(button => button.Content is string).Select(button => (string)button.Content).ToList();
+            buttons.ShouldContain("Open Startup Apps");
+            buttons.ShouldNotContain("Open log folder");
+        }
+        finally
+        {
+            window.Hide();
+        }
+    }
 
-            // A tolerance because the transform to window space carries floating-point error: the
-            // same 8 px margin measured 7.99999999999994 on one run and 8 on another.
-            var logFolder = BoundsIn(window, buttons[0]);
-            var startupApps = BoundsIn(window, buttons[1]);
-            (startupApps.Left - logFolder.Right).ShouldBe(8, tolerance: 0.01);
+    /// <summary>
+    /// The About tab's buttons in reading order, which is their tab order, and every one wired to a
+    /// command: a button whose binding path is misspelled renders perfectly and does nothing.
+    /// </summary>
+    [WpfFact]
+    public void AboutTab_OffersItsLinks_InReadingOrder_EachWithACommand()
+    {
+        var window = ShownWindow(HotkeyStatus.Registered);
+        try
+        {
+            SelectTab(window, "About");
+
+            var buttons = Descendants<Button>(window).Where(button => button.Content is string and not "").ToList();
+            buttons.Select(button => (string)button.Content)
+                .ShouldBe([window.About.VersionLabel, "Open log folder", "Source code", "Report a problem", "Rate in the Store"]);
+            buttons.ShouldAllBe(button => button.Command != null);
+            buttons[0].Command.ShouldBe(window.About.CopyVersionCommand);
+
+            // The two links in the footer, which are hyperlinks in a line of text and not buttons.
+            var footer = Descendants<TextBlock>(window).Single(block => block.Inlines.OfType<System.Windows.Documents.Hyperlink>().Any());
+            footer.Inlines.OfType<System.Windows.Documents.Hyperlink>().Select(link => link.Command)
+                .ShouldBe([window.About.OpenHomepageCommand, window.About.OpenMacAppCommand]);
+        }
+        finally
+        {
+            window.Hide();
+        }
+    }
+
+    /// <summary>
+    /// The miniature desktop draws the display to scale and says what a press did in the caption
+    /// beneath it, with the chord the command is bound to right now. The window hands it that lookup;
+    /// left at its default it would show Ctrl+Alt+D to a user who had rebound the command.
+    /// </summary>
+    [WpfFact]
+    public void AboutTab_MiniDesktop_PressesTheUsersOwnShortcut_AndSaysSo()
+    {
+        var (window, settings) = ShownWindowWith(HotkeyStatus.Registered, StartupStatus.NotRegistered);
+        try
+        {
+            SelectTab(window, "About");
+            var desktop = Descendants<MiniDesktop>(window).ShouldHaveSingleItem();
+            var screen = MiniDesktopModel.Screen.Frame;
+            (desktop.ActualWidth / desktop.ActualHeight).ShouldBe(screen.Width / (double)screen.Height, tolerance: 0.01);
+            desktop.Status.ShouldBe(MiniDesktop.Hint);
+
+            var first = MiniDesktopModel.Script[0].Command;
+            desktop.Press();
+
+            desktop.Status.ShouldContain(first.Title());
+            desktop.Status.ShouldContain(first.DefaultShortcut().DisplayText);
+            Descendants<TextBlock>(window).ShouldContain(block => block.Text == desktop.Status);
+
+            var second = MiniDesktopModel.Script[1].Command;
+            window.Shortcuts.Groups.SelectMany(group => group.Rows).Single(row => row.Title == second.Title()).Shortcut = Shortcut.Parse("Ctrl+Shift+F9");
+            desktop.Press();
+
+            desktop.Status.ShouldContain("Ctrl+Shift+F9");
+            settings.Current.Shortcuts.ShouldContainKey(second.Id());
         }
         finally
         {
@@ -366,6 +426,7 @@ public class SettingsWindowTests
         var window = new SettingsWindow(
             new SettingsViewModel(settings, startup, NullLogger<SettingsViewModel>.Instance),
             new ShortcutsViewModel(hotkeys, dialogs),
+            new AboutViewModel(hotkeys.EffectiveShortcut, NullLogger<AboutViewModel>.Instance, _ => true, () => { }, Path.GetTempPath(), _ => true, _ => Task.CompletedTask),
             dialogs,
             NullLogger<SettingsWindow>.Instance);
         window.Resources.MergedDictionaries.Add(new ThemesDictionary { Theme = ApplicationTheme.Dark });
