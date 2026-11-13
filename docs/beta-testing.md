@@ -54,13 +54,14 @@ Running an *older* Setup over a newer install is refused, with a message saying 
 Send back both of these:
 
 - The app log: press <kbd>Win</kbd>+<kbd>R</kbd>, paste `%LOCALAPPDATA%\Loadstone\Logs` and press
-  Enter. Take the newest file. (Settings has an **Open log folder** button that goes to the same
-  place.)
+  Enter. Take the newest file. (Settings → About has an **Open log folder** button that goes to the
+  same place.)
 - The installer log, if the problem was during install: press <kbd>Win</kbd>+<kbd>R</kbd>, paste
   `%TEMP%` and press Enter, and take the newest `Setup Log*.txt`.
 
-Please say which build you were running — search the app log for the line containing `launched:`,
-which names the version and the folder it started from.
+Please say which build you were running. Settings → About shows the version, and a click on it
+copies it. The app log says more: search it for the line containing `launched:`, which names the
+version and the folder it started from.
 
 ## Uninstalling
 

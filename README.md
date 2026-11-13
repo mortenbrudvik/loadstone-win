@@ -34,6 +34,7 @@ Loadstone sits in the tray and stays out of the way. When you need two documents
 - **Multi-display** — press left or right half again and the window carries on into the display beside it, one half at a time. Or send a window to the next or previous display, walking displays left to right as they sit on the desk: the window keeps the place and the proportion of the work area it had, so a half stays a half. That mapping is by pixel size, not DPI: on a display with the same pixel dimensions but heavier scaling, the window keeps its pixel size and so looks physically smaller
 - **Custom shortcuts** — Magnet-style defaults, all editable, with a warning when a chord is taken by another app or types a character on your keyboard layout
 - **Launch at login** — optional, from Settings
+- **Try it in Settings → About** — a desktop in miniature: click the stone to press each shortcut in turn and watch a window take the tile, or drag a window to an edge or a corner to see where it snaps. The same tab has the version (click it to copy) and the log folder
 
 Drag snapping is off until you turn it on in Settings, because turning it on is what lets Loadstone switch off Windows' own drag-to-edge snapping while it runs, so the two don't fight; switching drag snapping back off, quitting, or signing out puts Windows' setting back. If Loadstone is killed before it can put the setting back, the next launch notices and restores it. The two flags it changes are the drag-to-edge ones, so Win+Arrow and Snap Layouts should be unaffected — but only drag drops were tried when this was measured, so neither is verified.
 
@@ -134,7 +135,7 @@ Tray → Loadstone → **Loadstone Help** opens <https://brudvik.com/loadstone/w
 
 **Launch at login is on but Loadstone does not start.** Task Manager → Startup apps may have it disabled; Settings shows "Disabled in Task Manager" with a button to open that page.
 
-**Reading the log.** Loadstone writes daily logs to `%LOCALAPPDATA%\Loadstone\Logs`, the same path whether run from source or installed from the Store — the package does not redirect file-system writes, only the registry. Settings → General → **Open log folder** opens it directly, which is worth using anyway: it resolves the path for you rather than making you type it. The startup summary lists the effective binding and status of every shortcut.
+**Reading the log.** Loadstone writes daily logs to `%LOCALAPPDATA%\Loadstone\Logs`, the same path whether run from source or installed from the Store — the package does not redirect file-system writes, only the registry. Settings → About → **Open log folder** opens it directly, which is worth using anyway: it resolves the path for you rather than making you type it. The startup summary lists the effective binding and status of every shortcut.
 
 ## Build and test
 
@@ -143,7 +144,7 @@ dotnet build Loadstone.slnx                                   # warnings are err
 dotnet test --solution Loadstone.slnx                         # every test project
 dotnet test --project tests/Loadstone.Core.Tests/Loadstone.Core.Tests.csproj
 dotnet test --project tests/Loadstone.UI.Tests/Loadstone.UI.Tests.csproj --filter-query "/*/*/Win32WindowTests/*"
-& 'C:\Program Files\PowerShell\7\pwsh.exe' -File tools/icons/generate.ps1   # regenerate the .ico assets
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -File tools/icons/generate.ps1   # regenerate the .ico and Store image assets
 ```
 
 `global.json` opts the repo into the Microsoft.Testing.Platform runner (xunit.v3), so a positional `dotnet test Loadstone.slnx` and `--logger` do not apply; use `--solution`/`--project` and `--report-trx`. Filtering still works: `--filter` takes VSTest syntax, and xunit.v3 adds `--filter-class`, `--filter-method`, `--filter-namespace`, `--filter-trait` and their `--filter-not-*` variants. Use one family per run — `--filter` cannot be combined with `--filter-query` or the simple filters.
@@ -159,6 +160,8 @@ Loadstone is a tray-only WPF app. Shortcuts and drag gestures go to a small wind
 5. Reports what the window answered: a refused write makes Loadstone beep and log
 
 Drag snapping listens to Windows' own move-loop events instead of the mouse, so a text selection or a slider dragged to a screen edge is left alone, and the snap is applied after Windows has finished the drop.
+
+The splash at startup runs on a thread of its own, so it moves while the rest of the app is still starting, and it never takes the keyboard: a shortcut pressed while it is up reaches the window in front. Click it to dismiss it.
 
 ## Name
 

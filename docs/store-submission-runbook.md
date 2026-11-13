@@ -41,7 +41,7 @@ These block a submission and none of them is Partner Center work:
 | Missing | Why it blocks | What it needs |
 | --- | --- | --- |
 | ~~Privacy policy URL~~ **done** | Store policy 10.5.1 makes one mandatory regardless of what is collected | <https://mortenbrudvik.github.io/loadstone-site/privacy/> — served from the public `mortenbrudvik/loadstone-site` repo, since this one is private |
-| ~~At least one screenshot~~ **done** | Every listing requires one | `docs/store/screenshots/01-general.png` and `02-shortcuts.png`, 1920×1080 PNG. Captured from the real app at 150% scaling. Note the window uses a Mica backdrop, so its tint carries a trace of the desktop wallpaper behind it — recapture over a plain wallpaper if a neutral tint is wanted |
+| ~~At least one screenshot~~ **done** | Every listing requires one | `docs/store/screenshots/01-general.png`, `02-shortcuts.png` and `03-about.png`, 1920×1080 PNG. Retaken 2026-11-13, when About became a tab of its own, from the running app at 150% scaling: UI Automation selected each tab and pressed the stone twice for the About one, `PrintWindow` read the window, and the result was set on a plain gradient. Read that way the window has no Mica tint, so nothing of the desktop wallpaper shows through. `01-general.png` shows whatever the settings were on the machine it was taken on |
 | ~~Identity values~~ **done** | See above | Reserved 2026-09-09; package rebuilt and verified |
 
 ## What to do in Partner Center
